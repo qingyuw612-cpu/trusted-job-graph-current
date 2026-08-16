@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --cov=deployment_app --cov-report=term-missing --cov-fail-under=60"
+
+[tool.coverage.run]
+branch = true
+source = ["deployment_app"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 60

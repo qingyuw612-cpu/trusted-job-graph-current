@@ -1,0 +1,11 @@
+{
+  "http_uri": "http://127.0.0.1:7474",
+  "bolt_uri": "bolt://127.0.0.1:7687",
+  "database": "neo4j",
+  "username": "neo4j",
+  "password": "change-me",
+  "instance_dir": "C:\\path\\to\\neo4j-instance",
+  "import_dir": "C:\\path\\to\\neo4j-instance\\import",
+  "cypher_shell": "C:\\path\\to\\neo4j-instance\\bin\\cypher-shell.bat",
+  "java_home": "C:\\path\\to\\java"
+}

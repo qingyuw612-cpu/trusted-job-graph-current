@@ -1,0 +1,12 @@
+services:
+  app:
+    environment:
+      DATA_BACKEND: neo4j
+      NEO4J_CONFIG_PATH: /run/secrets/neo4j_connection.json
+      NEO4J_HTTP_URI: http://host.docker.internal:7474
+      EVOLUTION_DATA_ROOT: /data/evolution
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - "${NEO4J_CONFIG_PATH:-./config/neo4j_connection.json}:/run/secrets/neo4j_connection.json:ro"
+      - "${EVOLUTION_DATA_PATH:-./output/role_evolution_workbench_v2}:/data/evolution:ro"

@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "weights": {
+    "title": 0.58,
+    "skill": 0.42
+  },
+  "thresholds": {
+    "review_merge_score": 0.72,
+    "review_subrole_score": 0.58,
+    "min_new_role_jds": 3,
+    "min_new_role_companies": 3,
+    "min_new_role_skills": 3
+  },
+  "retrieval": {
+    "top_k_existing_roles": 5,
+    "sample_jds_per_candidate": 3
+  },
+  "publication": {
+    "new_role_requires_human_approval": true,
+    "write_neo4j": false
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Role Concept Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidate_id", "decision", "target_role_id", "canonical_name", "parent_role_id", "tags", "confidence", "reason", "model_version"],
+  "properties": {
+    "candidate_id": {"type": "string", "pattern": "^candidate:"},
+    "decision": {
+      "enum": ["EXISTING_ROLE", "ALIAS", "SUBROLE_OF", "NEW_ROLE_CANDIDATE", "NON_IT", "NOISE", "INSUFFICIENT_INFO"]
+    },
+    "target_role_id": {"type": "string"},
+    "canonical_name": {"type": "string"},
+    "parent_role_id": {"type": "string"},
+    "tags": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "reason": {"type": "string", "minLength": 10},
+    "model_version": {"type": "string", "minLength": 1}
+  }
+}

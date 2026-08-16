@@ -1,0 +1,101 @@
+# Source-only allowlist: ignore everything unless explicitly included below.
+*
+
+# Repository metadata and setup
+!/.gitignore
+!/README.md
+!/TEAM_HANDOFF.md
+!/requirements.txt
+!/requirements-normalization.txt
+!/requirements-test.txt
+!/requirements-crawler.txt
+!/pyproject.toml
+!/Dockerfile
+!/compose.yaml
+!/compose.full.yaml
+!/compose.neo4j.yaml
+!/.dockerignore
+!/DEPLOYMENT.md
+!/CRAWLER_STANDALONE.md
+
+# Top-level processing entry points
+!/*.py
+
+# Safe example and algorithm configuration
+!/config/
+/config/*
+!/config/it_domain_filter.json
+!/config/neo4j_connection.example.json
+
+# Core graph processing and panorama frontend
+!/trusted_graph_agent/
+/trusted_graph_agent/*
+!/trusted_graph_agent/*.py
+!/trusted_graph_agent/*.json
+!/trusted_graph_agent/static/
+/trusted_graph_agent/static/*
+!/trusted_graph_agent/static/*.html
+
+# Processing and raw-import logic
+!/processing_layer/
+/processing_layer/*
+!/processing_layer/*.py
+!/raw_jd_layer/
+/raw_jd_layer/*
+!/raw_jd_layer/*.py
+!/raw_jd_layer/config.example.json
+
+# New-role discovery logic and frontend
+!/new_role_discovery/
+/new_role_discovery/*
+!/new_role_discovery/*.py
+!/new_role_discovery/static/
+/new_role_discovery/static/*
+!/new_role_discovery/static/*.html
+
+# Sanitized, reproducible review fixture only
+!/demo_data/
+/demo_data/*
+!/demo_data/review_demo.json
+
+# Tests are source and must remain reviewable
+!/tests/
+/tests/*
+!/tests/*.py
+
+# Role-normalization algorithms and their controlled rule files
+!/role_normalization_project/
+/role_normalization_project/*
+!/role_normalization_project/*.py
+!/role_normalization_project/pyproject.toml
+!/role_normalization_project/role_family_classification.csv
+!/role_normalization_project/concept_standardization/
+/role_normalization_project/concept_standardization/*
+!/role_normalization_project/concept_standardization/*.py
+!/role_normalization_project/role_normalizer/
+/role_normalization_project/role_normalizer/*
+!/role_normalization_project/role_normalizer/*.py
+!/role_normalization_project/config/
+/role_normalization_project/config/*
+!/role_normalization_project/config/*.json
+!/role_normalization_project/config/*.md
+
+# Explicitly keep secrets, large models, logs and generated/private data out
+*.env
+.env*
+!/.env.example
+*.key
+*.pem
+*.log
+*.db
+*.dump
+*.backup
+/models/
+/output/
+/neo4j/
+/neo4j_backups/
+/config/neo4j_connection.json
+/raw_jd_layer/config.json
+/.coverage
+/htmlcov/
+/.pytest_cache/

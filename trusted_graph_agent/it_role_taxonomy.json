@@ -1,0 +1,82 @@
+{
+  "version": "2.0.0",
+  "domain": {"domain_id": "it", "domain_name": "新一代信息技术"},
+  "families": [
+    {"family_id": "digital_product", "family_name": "数字产品与需求"},
+    {"family_id": "ai", "family_name": "人工智能与算法"},
+    {"family_id": "backend", "family_name": "后端与服务端开发"},
+    {"family_id": "client", "family_name": "前端、移动端与游戏"},
+    {"family_id": "data", "family_name": "数据工程与分析"},
+    {"family_id": "chip", "family_name": "芯片与半导体"},
+    {"family_id": "quality", "family_name": "软件与硬件测试"},
+    {"family_id": "electronics", "family_name": "电子、嵌入式与控制"},
+    {"family_id": "infrastructure", "family_name": "网络、运维与通信"},
+    {"family_id": "intelligent_systems", "family_name": "智能汽车与低空系统"}
+  ],
+  "roles": [
+    {"role_name":"产品经理","family_id":"digital_product","parent_role":"","aliases":["产品主管"],"sources":["互联网产品经理_output_folder/产品经理.csv"]},
+    {"role_name":"平台产品经理","family_id":"digital_product","parent_role":"产品经理","aliases":["平台型产品经理"],"sources":["互联网产品经理_output_folder/平台产品经理.csv"]},
+    {"role_name":"数据产品经理","family_id":"digital_product","parent_role":"产品经理","aliases":["大数据产品经理"],"sources":["互联网产品经理_output_folder/数据产品经理.csv"]},
+    {"role_name":"需求工程师","family_id":"digital_product","parent_role":"","aliases":["需求分析工程师"],"sources":["互联网产品经理_output_folder/需求工程师.csv"]},
+
+    {"role_name":"算法工程师","family_id":"ai","parent_role":"","aliases":["AI算法工程师"],"sources":["人工智能_output_folder/算法工程师.csv"]},
+    {"role_name":"机器学习工程师","family_id":"ai","parent_role":"算法工程师","aliases":["机器学习算法工程师"],"sources":["人工智能_output_folder/机器学习工程师.csv"]},
+    {"role_name":"计算机视觉工程师","family_id":"ai","parent_role":"算法工程师","aliases":["机器视觉工程师","视觉算法工程师","图像算法工程师"],"sources":["人工智能_output_folder/机器视觉工程师.csv"]},
+    {"role_name":"深度学习工程师","family_id":"ai","parent_role":"算法工程师","aliases":["深度学习算法工程师"],"sources":["人工智能_output_folder/深度学习工程师.csv"]},
+    {"role_name":"自然语言处理工程师","family_id":"ai","parent_role":"算法工程师","aliases":["NLP工程师","自然语言处理"],"sources":["人工智能_output_folder/自然语言处理.csv"]},
+    {"role_name":"语音识别工程师","family_id":"ai","parent_role":"算法工程师","aliases":["语音算法工程师","ASR工程师"],"sources":["人工智能_output_folder/语音识别工程师.csv"]},
+
+    {"role_name":".NET开发工程师","family_id":"backend","parent_role":"","aliases":["DotNet开发工程师"],"sources":["后端开发_output_folder/.NET开发工程师.csv"]},
+    {"role_name":"C++开发工程师","family_id":"backend","parent_role":"","aliases":["CPP开发工程师"],"sources":["后端开发_output_folder/c++开发工程师.csv"]},
+    {"role_name":"Go开发工程师","family_id":"backend","parent_role":"","aliases":["Golang开发工程师","Go语言开发"],"sources":["后端开发_output_folder/Golang.csv"]},
+    {"role_name":"Java开发工程师","family_id":"backend","parent_role":"","aliases":["Java后端开发","Java工程师"],"sources":["后端开发_output_folder/java开发工程师.csv"]},
+    {"role_name":"Python开发工程师","family_id":"backend","parent_role":"","aliases":["Python后端开发","Python工程师"],"sources":["后端开发_output_folder/python开发工程师.csv"]},
+
+    {"role_name":"Android开发工程师","family_id":"client","parent_role":"","aliases":["安卓开发工程师"],"sources":["前端开发_output_folder/android开发.csv"]},
+    {"role_name":"Cocos开发工程师","family_id":"client","parent_role":"","aliases":["Cocos2d开发工程师"],"sources":["前端开发_output_folder/cocos开发.csv"]},
+    {"role_name":"iOS开发工程师","family_id":"client","parent_role":"","aliases":["苹果客户端开发"],"sources":["前端开发_output_folder/ios开发.csv"]},
+    {"role_name":"Unity3D开发工程师","family_id":"client","parent_role":"","aliases":["U3D开发工程师","Unity开发工程师"],"sources":["前端开发_output_folder/U3D开发.csv"]},
+    {"role_name":"UE4开发工程师","family_id":"client","parent_role":"","aliases":["UE开发工程师","Unreal开发工程师"],"sources":["前端开发_output_folder/UE4开发.csv"]},
+    {"role_name":"前端开发工程师","family_id":"client","parent_role":"","aliases":["Web前端开发"],"sources":["前端开发_output_folder/前端开发.csv"]},
+    {"role_name":"游戏开发工程师","family_id":"client","parent_role":"","aliases":["游戏程序开发"],"sources":["前端开发_output_folder/游戏开发工程师.csv"]},
+    {"role_name":"鸿蒙开发工程师","family_id":"client","parent_role":"","aliases":["HarmonyOS开发工程师"],"sources":["前端开发_output_folder/鸿蒙开发工程师.csv"]},
+
+    {"role_name":"BI工程师","family_id":"data","parent_role":"","aliases":["商业智能工程师"],"sources":["数据_output_folder/BI工程师.csv"]},
+    {"role_name":"ETL开发工程师","family_id":"data","parent_role":"","aliases":["ETL工程师","数据集成工程师"],"sources":["数据_output_folder/ETL开发工程师.csv"]},
+    {"role_name":"数据分析师","family_id":"data","parent_role":"","aliases":["数据分析工程师"],"sources":["数据_output_folder/数据分析师.csv"]},
+    {"role_name":"数据建模工程师","family_id":"data","parent_role":"","aliases":["数仓建模工程师"],"sources":["数据_output_folder/数据建模工程师.csv"]},
+    {"role_name":"数据采集工程师","family_id":"data","parent_role":"","aliases":["数据抓取工程师","爬虫工程师"],"sources":["数据_output_folder/数据采集工程师.csv"]},
+
+    {"role_name":"EDA工程师","family_id":"chip","parent_role":"","aliases":["电子设计自动化工程师"],"sources":["半导体_output_folder/EDA工程师.csv"]},
+    {"role_name":"半导体工程师","family_id":"chip","parent_role":"","aliases":["半导体工艺工程师"],"sources":["半导体_output_folder/半导体工程师.csv"]},
+    {"role_name":"芯片架构工程师","family_id":"chip","parent_role":"","aliases":["芯片系统架构师"],"sources":["半导体_output_folder/芯片架构工程师.csv"]},
+    {"role_name":"芯片测试工程师","family_id":"chip","parent_role":"","aliases":["IC测试工程师"],"sources":["半导体_output_folder/芯片测试工程师.csv"]},
+    {"role_name":"IC设计工程师","family_id":"chip","parent_role":"","aliases":["集成电路设计工程师","集成电路IC设计"],"sources":["半导体_output_folder/集成电路IC设计.csv"]},
+
+    {"role_name":"测试开发工程师","family_id":"quality","parent_role":"","aliases":["测试开发"],"sources":["测试_output_folder/测试开发.csv"]},
+    {"role_name":"硬件测试工程师","family_id":"quality","parent_role":"","aliases":["硬件测试"],"sources":["测试_output_folder/硬件测试.csv","硬件开发_output_folder/硬件测试工程师.csv"]},
+    {"role_name":"自动化测试工程师","family_id":"quality","parent_role":"","aliases":["自动化测试"],"sources":["测试_output_folder/自动化测试.csv"]},
+    {"role_name":"软件测试工程师","family_id":"quality","parent_role":"","aliases":["软件测试"],"sources":["测试_output_folder/软件测试.csv"]},
+    {"role_name":"通信测试工程师","family_id":"quality","parent_role":"","aliases":["通信测试"],"sources":["测试_output_folder/通信测试工程师.csv","通信_output_folder/通信测试工程师.csv"]},
+
+    {"role_name":"PCB工程师","family_id":"electronics","parent_role":"","aliases":["PCB设计工程师"],"sources":["电子技术_output_folder/PCB工程师.csv"]},
+    {"role_name":"光电子工程师","family_id":"electronics","parent_role":"","aliases":["光电子技术"],"sources":["电子技术_output_folder/光电子技术.csv"]},
+    {"role_name":"嵌入式硬件开发工程师","family_id":"electronics","parent_role":"","aliases":["嵌入式硬件开发"],"sources":["电子技术_output_folder/嵌入式硬件开发.csv","硬件开发_output_folder/嵌入式硬件开发.csv"]},
+    {"role_name":"嵌入式软件开发工程师","family_id":"electronics","parent_role":"","aliases":["嵌入式软件开发"],"sources":["电子技术_output_folder/嵌入式软件开发.csv"]},
+    {"role_name":"电气工程师","family_id":"electronics","parent_role":"","aliases":["电气开发工程师"],"sources":["电子技术_output_folder/电气工程师.csv"]},
+    {"role_name":"电源开发工程师","family_id":"electronics","parent_role":"","aliases":["电源开发"],"sources":["电子技术_output_folder/电源开发.csv"]},
+    {"role_name":"硬件工程师","family_id":"electronics","parent_role":"","aliases":["硬件开发工程师"],"sources":["电子技术_output_folder/硬件工程师.csv","硬件开发_output_folder/硬件工程师.csv"]},
+    {"role_name":"自动控制工程师","family_id":"electronics","parent_role":"","aliases":["自动化控制工程师"],"sources":["电子技术_output_folder/自动控制工程师.csv"]},
+
+    {"role_name":"网络工程师","family_id":"infrastructure","parent_role":"","aliases":["网络运维工程师"],"sources":["运维_output_folder/网络工程师.csv"]},
+    {"role_name":"运维工程师","family_id":"infrastructure","parent_role":"","aliases":["系统运维工程师"],"sources":["运维_output_folder/运维工程师.csv"]},
+    {"role_name":"通信技术工程师","family_id":"infrastructure","parent_role":"","aliases":["通信工程师"],"sources":["通信_output_folder/通信技术工程师.csv"]},
+    {"role_name":"通信网络工程师","family_id":"infrastructure","parent_role":"","aliases":["通信网络优化工程师"],"sources":["通信_output_folder/通信网络工程师.csv"]},
+
+    {"role_name":"智能驾驶工程师","family_id":"intelligent_systems","parent_role":"","aliases":["智驾工程师"],"sources":["人工智能_output_folder/智能驾驶工程师.csv","汽车研发设计_output_folder/智能驾驶工程师.csv"]},
+    {"role_name":"汽车电子工程师","family_id":"intelligent_systems","parent_role":"","aliases":["汽车电子开发工程师"],"sources":["汽车研发设计_output_folder/汽车电子工程师.csv"]},
+    {"role_name":"低空GIS工程师","family_id":"intelligent_systems","parent_role":"","aliases":["低空GIS"],"sources":["低空经济_output_folder/低空GIS.csv"]},
+    {"role_name":"低空经济系统工程师","family_id":"intelligent_systems","parent_role":"","aliases":["低空经济系统"],"sources":["低空经济_output_folder/低空经济系统.csv"]},
+    {"role_name":"无人机工程师","family_id":"intelligent_systems","parent_role":"","aliases":["无人机系统工程师"],"sources":["低空经济_output_folder/无人机工程师.csv"]}
+  ]
+}

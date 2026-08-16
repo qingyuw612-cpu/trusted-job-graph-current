@@ -1,0 +1,31 @@
+{
+  "model_name": "BAAI/bge-small-zh-v1.5",
+  "embedding_batch_size": 32,
+  "nearest_neighbor_top_k": 10,
+  "auto_merge_score": 0.94,
+  "cluster_similarity_threshold": 0.88,
+  "minimum_lexical_guard": 0.45,
+  "phrase_similarity_weight": 0.65,
+  "context_similarity_weight": 0.25,
+  "lexical_similarity_weight": 0.10,
+  "minimum_company_count": 3,
+  "minimum_verified_jd_count": 4,
+  "standard_candidate_min_companies": 3,
+  "standard_candidate_min_jds": 5,
+  "standard_candidate_verified_rate": 0.50,
+  "company_coverage_weight": 0.40,
+  "jd_coverage_weight": 0.20,
+  "role_distinctiveness_weight": 0.10,
+  "requirement_weight": 0.10,
+  "evidence_weight": 0.10,
+  "time_weight": 0.10,
+  "mmr_relevance_weight": 0.75,
+  "mmr_candidate_count_per_category": 20,
+  "top_k": {
+    "技术": 6,
+    "知识": 4,
+    "特质": 3,
+    "动机": 2,
+    "自我概念": 2
+  }
+}

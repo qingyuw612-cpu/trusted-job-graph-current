@@ -1,0 +1,104 @@
+{
+  "version": "1.0.0",
+  "embedding_model": "BAAI/bge-small-zh-v1.5",
+  "matching": {
+    "top_k": 5,
+    "weights": {
+      "title": 0.35,
+      "responsibility": 0.25,
+      "skill": 0.3,
+      "lexical": 0.1
+    },
+    "thresholds": {
+      "auto_match": 0.93,
+      "review": 0.82,
+      "new_role_min_jds": 3,
+      "new_role_min_companies": 3,
+      "new_role_min_templates": 3,
+      "new_role_min_skills": 3
+    }
+  },
+  "hard_constraint_terms": {
+    "开发": ["开发", "研发", "编程"],
+    "测试": ["测试", "测评", "质量保障", "QA"],
+    "运维": ["运维", "SRE", "系统管理"],
+    "产品": ["产品", "产品策划"],
+    "销售": ["销售", "售前", "商务"]
+  },
+  "new_role_discovery": {
+    "cluster_similarity": 0.82,
+    "min_jds": 3,
+    "min_companies": 3,
+    "min_templates": 3,
+    "min_skills": 3,
+    "max_cluster_size": 200,
+    "max_pair_comparisons": 5000000
+  },
+  "role_registry": {
+    "roles": [
+      {
+        "role_id": "role:algorithm-engineer",
+        "canonical_name": "算法工程师",
+        "aliases": ["AI算法工程师", "人工智能算法工程师"],
+        "family": "人工智能",
+        "description": "设计、训练和优化机器学习或人工智能算法。",
+        "is_it_role": true,
+        "tags": ["算法", "人工智能"]
+      },
+      {
+        "role_id": "role:data-analyst",
+        "canonical_name": "数据分析师",
+        "aliases": ["数据分析", "商业数据分析师"],
+        "family": "数据",
+        "description": "利用数据分析方法支持业务洞察和决策。",
+        "is_it_role": true,
+        "tags": ["数据分析"]
+      },
+      {
+        "role_id": "role:java-developer",
+        "canonical_name": "Java开发工程师",
+        "aliases": ["JAVA开发", "JAVA开发工程师", "Java工程师"],
+        "family": "软件开发",
+        "description": "使用 Java 技术栈开展软件设计与开发。",
+        "is_it_role": true,
+        "tags": ["Java", "后端"]
+      },
+      {
+        "role_id": "role:operations-engineer",
+        "canonical_name": "运维工程师",
+        "aliases": ["IT运维工程师", "系统运维工程师"],
+        "family": "运维",
+        "description": "负责信息系统、平台或基础设施的运行维护。",
+        "is_it_role": true,
+        "tags": ["运维"]
+      },
+      {
+        "role_id": "role:product-manager",
+        "canonical_name": "产品经理",
+        "aliases": ["产品专员", "互联网产品经理"],
+        "family": "产品",
+        "description": "负责产品规划、需求分析和产品生命周期管理。",
+        "is_it_role": true,
+        "tags": ["产品"]
+      },
+      {
+        "role_id": "role:software-engineer",
+        "canonical_name": "软件工程师",
+        "aliases": ["软件开发工程师", "软件研发工程师"],
+        "family": "软件开发",
+        "description": "从事通用软件系统的设计、开发和维护。",
+        "is_it_role": true,
+        "tags": ["软件开发"]
+      },
+      {
+        "role_id": "role:test-engineer",
+        "canonical_name": "测试工程师",
+        "aliases": ["软件测试工程师", "QA工程师"],
+        "family": "质量保障",
+        "description": "负责软件或系统的测试设计、执行和质量保障。",
+        "is_it_role": true,
+        "tags": ["测试", "质量保障"]
+      }
+    ]
+  }
+}

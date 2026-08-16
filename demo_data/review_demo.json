@@ -1,0 +1,60 @@
+{
+  "version": "2026.08-sanitized-v1",
+  "counts": {"jds": 186, "roles": 3, "skills": 15, "companies": 72},
+  "facets": {
+    "industries": [{"industry_id": "tech", "industry_name": "数字技术"}],
+    "levels": [{"level_id": "mid", "level_name": "中级"}, {"level_id": "senior", "level_name": "高级"}],
+    "stacks": ["AI工程", "数据工程", "产品"],
+    "categories": ["专业技能", "工具平台", "业务能力"],
+    "time_windows": ["2026-Q1", "2026-Q2"],
+    "families": [{"family_id": "digital", "family_name": "数字岗位"}]
+  },
+  "roles": [
+    {"role_id": "ai_product", "role_name": "AI产品经理", "family_name": "产品与运营", "document_count": 78, "company_count": 31},
+    {"role_id": "agent_engineer", "role_name": "智能体应用工程师", "family_name": "研发", "document_count": 64, "company_count": 26},
+    {"role_id": "data_governance", "role_name": "数据治理工程师", "family_name": "数据", "document_count": 44, "company_count": 19}
+  ],
+  "skills_by_role": {
+    "ai_product": [
+      {"skill_id": "prompt_design", "name": "提示词设计", "category": "专业技能", "stack": "AI工程", "evidence_count": 29},
+      {"skill_id": "rag", "name": "检索增强生成", "category": "专业技能", "stack": "AI工程", "evidence_count": 25},
+      {"skill_id": "evaluation", "name": "模型效果评测", "category": "工具平台", "stack": "AI工程", "evidence_count": 21},
+      {"skill_id": "roadmap", "name": "产品路线规划", "category": "业务能力", "stack": "产品", "evidence_count": 37},
+      {"skill_id": "user_research", "name": "用户研究", "category": "业务能力", "stack": "产品", "evidence_count": 34}
+    ],
+    "agent_engineer": [
+      {"skill_id": "agent_framework", "name": "智能体框架", "category": "专业技能", "stack": "AI工程", "evidence_count": 32},
+      {"skill_id": "tool_calling", "name": "工具调用编排", "category": "专业技能", "stack": "AI工程", "evidence_count": 28},
+      {"skill_id": "python", "name": "Python", "category": "工具平台", "stack": "AI工程", "evidence_count": 46},
+      {"skill_id": "vector_db", "name": "向量数据库", "category": "工具平台", "stack": "数据工程", "evidence_count": 23},
+      {"skill_id": "observability", "name": "应用可观测性", "category": "业务能力", "stack": "AI工程", "evidence_count": 18}
+    ],
+    "data_governance": [
+      {"skill_id": "data_catalog", "name": "数据目录", "category": "专业技能", "stack": "数据工程", "evidence_count": 24},
+      {"skill_id": "lineage", "name": "数据血缘", "category": "专业技能", "stack": "数据工程", "evidence_count": 22},
+      {"skill_id": "sql", "name": "SQL", "category": "工具平台", "stack": "数据工程", "evidence_count": 38},
+      {"skill_id": "quality_rules", "name": "质量规则设计", "category": "业务能力", "stack": "数据工程", "evidence_count": 27},
+      {"skill_id": "compliance", "name": "数据合规", "category": "业务能力", "stack": "数据工程", "evidence_count": 20}
+    ]
+  },
+  "evidence": {
+    "prompt_design": [{"title": "AI产品经理（演示）", "company_name": "示例科技A", "evidence_status": "VERIFIED", "evidence_quote": "设计并持续评估面向业务场景的提示词方案。", "description": "本条为人工编写的脱敏演示文本，不对应任何真实招聘信息。", "level_name": "中级", "tech_stack": "AI工程", "time_window": "2026-Q2"}],
+    "rag": [{"title": "AI产品经理（演示）", "company_name": "示例科技B", "evidence_status": "VERIFIED", "evidence_quote": "规划知识检索与生成链路，并定义可量化验收指标。", "description": "本条为人工编写的脱敏演示文本，不对应任何真实招聘信息。", "level_name": "高级", "tech_stack": "AI工程", "time_window": "2026-Q2"}],
+    "agent_framework": [{"title": "智能体应用工程师（演示）", "company_name": "示例科技C", "evidence_status": "VERIFIED", "evidence_quote": "构建多步骤智能体工作流并实现失败恢复。", "description": "本条为人工编写的脱敏演示文本，不对应任何真实招聘信息。", "level_name": "中级", "tech_stack": "AI工程", "time_window": "2026-Q2"}],
+    "data_catalog": [{"title": "数据治理工程师（演示）", "company_name": "示例科技D", "evidence_status": "VERIFIED", "evidence_quote": "维护企业数据目录、标准定义与责任人映射。", "description": "本条为人工编写的脱敏演示文本，不对应任何真实招聘信息。", "level_name": "高级", "tech_stack": "数据工程", "time_window": "2026-Q2"}]
+  },
+  "evolution_run": {"task_id": "sanitized-demo-run", "status": "REVIEW_READY", "parameters": {"cutoff": "2026-03-31", "as_of": "2026-06-30"}, "summary": {"jds": 186}},
+  "evolution_result": {
+    "manifest": {"summary": {"jds": 186}, "data_classification": "synthetic_sanitized_demo"},
+    "new_role_candidates": [
+      {"candidate_title": "智能体应用工程师", "current_jd_count": 42, "current_company_count": 24, "emergence_score": 91, "candidate_skills_detail": [{"skill": "智能体框架"}, {"skill": "工具调用编排"}, {"skill": "Python"}, {"skill": "向量数据库"}], "responsibility_evidence": [{"text": "设计可调用业务工具的智能体工作流并持续评测效果。"}], "monthly_trend": [{"month": "2026-03", "jd_count": 8}, {"month": "2026-04", "jd_count": 17}, {"month": "2026-05", "jd_count": 29}, {"month": "2026-06", "jd_count": 42}], "semantic_review": {"status": "COMPLETED", "analysis": {"semantic_class": "NEW_ROLE", "canonical_name": "智能体应用工程师", "role_boundary": "面向业务场景编排模型、知识与工具，交付可观测的智能体应用。", "nearest_existing_role": "AI应用工程师"}}},
+      {"candidate_title": "大模型评测工程师", "current_jd_count": 27, "current_company_count": 18, "emergence_score": 83, "candidate_skills_detail": [{"skill": "评测集设计"}, {"skill": "红队测试"}, {"skill": "统计分析"}], "responsibility_evidence": [{"text": "建设模型能力、安全性与业务效果的分层评测体系。"}], "monthly_trend": [{"month": "2026-03", "jd_count": 6}, {"month": "2026-04", "jd_count": 11}, {"month": "2026-05", "jd_count": 19}, {"month": "2026-06", "jd_count": 27}], "semantic_review": {"status": "COMPLETED", "analysis": {"semantic_class": "SPECIALIZATION", "canonical_name": "大模型评测工程师", "role_boundary": "以评测集、指标和自动化平台验证模型质量与安全边界。", "nearest_existing_role": "算法测试工程师"}}}
+    ],
+    "role_skill_changes": [
+      {"role": "AI产品经理", "skill": "模型效果评测", "change_type": "INCREASED", "delta": 0.24, "current_coverage": 0.62, "current_company_count": 22, "baseline_company_count": 14, "rule_state": "REVIEW", "rule_reasons": [], "normalization_status": "NORMALIZED"},
+      {"role": "AI产品经理", "skill": "检索增强生成", "change_type": "ADDED_CANDIDATE", "delta": 0.18, "current_coverage": 0.43, "current_company_count": 17, "baseline_company_count": 6, "rule_state": "REVIEW", "rule_reasons": [], "normalization_status": "NORMALIZED"},
+      {"role": "数据治理工程师", "skill": "数据血缘", "change_type": "INCREASED", "delta": 0.21, "current_coverage": 0.58, "current_company_count": 16, "baseline_company_count": 9, "rule_state": "REVIEW", "rule_reasons": [], "normalization_status": "NORMALIZED"},
+      {"role": "数据治理工程师", "skill": "手工报表维护", "change_type": "DECREASED", "delta": -0.16, "current_coverage": 0.19, "current_company_count": 6, "baseline_company_count": 13, "rule_state": "REVIEW", "rule_reasons": [], "normalization_status": "NORMALIZED"}
+    ]
+  }
+}

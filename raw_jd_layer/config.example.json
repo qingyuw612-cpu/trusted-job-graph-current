@@ -1,0 +1,7 @@
+{
+  "source_root": "C:\\path\\to\\your-private-job-data",
+  "default_platform": "example-platform",
+  "batch_size": 100,
+  "max_batch_bytes": 4194304,
+  "extensions": [".csv", ".json", ".jsonl"]
+}
