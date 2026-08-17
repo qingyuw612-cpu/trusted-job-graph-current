@@ -9,6 +9,7 @@ services:
     restart: unless-stopped
     environment:
       NEO4J_AUTH: "${NEO4J_AUTH:?请在 .env 中设置 NEO4J_AUTH=neo4j/强密码}"
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
     volumes:
       - "${NEO4J_DATA_DIR:-/data/neo4j}:/data"
       - "${NEO4J_IMPORT_DIR:-/data/backups}:/import:ro"
