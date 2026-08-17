@@ -132,7 +132,7 @@ cmd_restore() {
     -v "$NEO4J_DATA_DIR:/data" \
     -v "$NEO4J_IMPORT_DIR:/import:ro" \
     "$NEO4J_IMAGE" \
-    neo4j-admin database load --from-path="/import/$dump_name" --overwrite-destination=true neo4j
+    neo4j-admin database load --from-path="/import" --overwrite-destination=true neo4j
 
   # 4) 重启
   info "重启 Neo4j..."
