@@ -107,10 +107,14 @@ cmd_restore() {
   dump_name="$(basename "$dump_src")"
 
   mkdir -p "$NEO4J_IMPORT_DIR"
+  local dest="$NEO4J_IMPORT_DIR/$dump_name"
   if [[ -f "$dump_src" ]]; then
-    cp -f "$dump_src" "$NEO4J_IMPORT_DIR/$dump_name"
-    info "已复制 $dump_src -> $NEO4J_IMPORT_DIR/$dump_name"
-  elif [[ ! -f "$NEO4J_IMPORT_DIR/$dump_name" ]]; then
+    # 源文件与目标相同时（已放在导入目录）无需复制，避免 cp 报 "same file"
+    if [[ "$(readlink -f "$dump_src")" != "$(readlink -f "$dest")" ]]; then
+      cp -f "$dump_src" "$dest"
+      info "已复制 $dump_src -> $dest"
+    fi
+  elif [[ ! -f "$dest" ]]; then
     die "找不到 dump 文件：$dump_src（也不在 $NEO4J_IMPORT_DIR 中）"
   fi
 
