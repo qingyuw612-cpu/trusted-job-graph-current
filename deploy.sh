@@ -129,6 +129,7 @@ cmd_restore() {
   # 3) 载入 dump 到默认数据库 neo4j
   info "载入 dump：$dump_name"
   docker run --rm \
+    -e NEO4J_ACCEPT_LICENSE_AGREEMENT=yes \
     -v "$NEO4J_DATA_DIR:/data" \
     -v "$NEO4J_IMPORT_DIR:/import:ro" \
     "$NEO4J_IMAGE" \
