@@ -14,12 +14,15 @@
 !/compose.yaml
 !/compose.full.yaml
 !/compose.neo4j.yaml
+!/compose.prod.yaml
 !/.dockerignore
 !/DEPLOYMENT.md
+!/DEPLOY_ALIYUN.md
 !/CRAWLER_STANDALONE.md
 
 # Top-level processing entry points
 !/*.py
+!/deploy.sh
 
 # Safe example and algorithm configuration
 !/config/

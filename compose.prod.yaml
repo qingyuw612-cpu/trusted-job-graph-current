@@ -1,0 +1,80 @@
+# 生产部署：应用（neo4j 后端）+ Neo4j 图数据库，同网通信。
+# 数据落在宿主机数据盘 /data/neo4j（可用 NEO4J_DATA_DIR 覆盖）。
+# 首次上线流程见 DEPLOY_ALIYUN.md 或运行 ./deploy.sh。
+name: trusted-job-graph-prod
+
+services:
+  neo4j:
+    image: neo4j:5.26-community
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: "${NEO4J_AUTH:?请在 .env 中设置 NEO4J_AUTH=neo4j/强密码}"
+    volumes:
+      - "${NEO4J_DATA_DIR:-/data/neo4j}:/data"
+      - "${NEO4J_IMPORT_DIR:-/data/backups}:/import:ro"
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:7474 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+    networks:
+      - internal
+
+  app:
+    build:
+      context: .
+      args:
+        BASE_IMAGE: "${BASE_IMAGE:-python:3.12-slim}"
+    restart: unless-stopped
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      DATA_BACKEND: neo4j
+      NEO4J_CONFIG_PATH: /run/secrets/neo4j_connection.json
+      NEO4J_HTTP_URI: http://neo4j:7474
+      EVOLUTION_DATA_ROOT: /data/evolution
+    volumes:
+      - "${NEO4J_CONFIG_PATH:-./config/neo4j_connection.json}:/run/secrets/neo4j_connection.json:ro"
+      - "${EVOLUTION_DATA_PATH:-./output/role_evolution_workbench_v2}:/data/evolution:ro"
+    init: true
+    stop_grace_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8080/healthz',timeout=2)); assert d['status']=='ok'"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
