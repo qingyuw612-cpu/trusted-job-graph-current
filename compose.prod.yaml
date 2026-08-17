@@ -5,7 +5,7 @@ name: trusted-job-graph-prod
 
 services:
   neo4j:
-    image: neo4j:5.26-community
+    image: neo4j:5.26-enterprise
     restart: unless-stopped
     environment:
       NEO4J_AUTH: "${NEO4J_AUTH:?请在 .env 中设置 NEO4J_AUTH=neo4j/强密码}"

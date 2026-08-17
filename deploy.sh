@@ -8,7 +8,7 @@ set -euo pipefail
 
 COMPOSE_FILE="compose.prod.yaml"
 ENV_FILE=".env"
-NEO4J_IMAGE="neo4j:5.26-community"
+NEO4J_IMAGE="neo4j:5.26-enterprise"
 
 # 默认路径（可被 .env 覆盖）
 NEO4J_DATA_DIR_DEFAULT="/data/neo4j"
