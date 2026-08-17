@@ -93,7 +93,8 @@ EOF
   "timeout_seconds": 120
 }
 EOF
-  chmod 600 config/neo4j_connection.json
+  # 644（而非 600）：应用容器以非 root 的 app 用户运行，需能读取此挂载文件
+  chmod 644 config/neo4j_connection.json
   info "已生成 config/neo4j_connection.json（密码与 .env 一致）。"
   info "初始化完成。下一步：把 .dump 文件放到 $NEO4J_IMPORT_DIR 后执行 ./deploy.sh restore <文件名>"
 }
