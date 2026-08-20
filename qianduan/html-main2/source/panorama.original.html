@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>信息技术岗位能力知识图谱</title>
+  <style>
+    :root{
+      --bg:#eef3f9;--panel:#fff;--ink:#17263a;--muted:#617086;--line:#d8e2ee;
+      --brand:#3978ff;--brand-soft:#eaf1ff;--graph:#f8fbff;--graph-2:#eaf1f9;
+      --role:#f26f3d;--category:#6f63e8;--skill:#19a889;--danger:#e5484d
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 Inter,"Microsoft YaHei",system-ui,sans-serif;display:grid;grid-template-rows:76px auto minmax(0,1fr);overflow:hidden}
+    button,select,input{font:inherit}
+    button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #3978ff35;outline-offset:2px}
+    .app-header{
+      height:76px;padding:0 24px;color:#fff;display:flex;align-items:center;justify-content:space-between;
+      background:
+        radial-gradient(circle at 18% -140%,#a9c6ff 0,transparent 44%),
+        linear-gradient(115deg,#3d73dd,#5f7fe5 58%,#776edd);
+      border-bottom:1px solid #ffffff40;box-shadow:0 5px 20px #4668b628
+    }
+    .brand{display:flex;align-items:center;gap:13px;min-width:0}
+    .brand-mark{position:relative;width:38px;height:38px;border-radius:12px;background:linear-gradient(145deg,#5a8cff,#7d62ff);box-shadow:0 8px 28px #326aff55;flex:0 0 auto}
+    .brand-mark i{position:absolute;width:6px;height:6px;border:1.5px solid #fff;border-radius:50%;background:#7890ff}
+    .brand-mark i:nth-child(1){left:8px;top:16px}.brand-mark i:nth-child(2){left:24px;top:8px}.brand-mark i:nth-child(3){left:24px;top:24px}
+    .brand-mark:before,.brand-mark:after{content:"";position:absolute;left:13px;width:14px;height:1px;background:#ffffffaa;transform-origin:left}
+    .brand-mark:before{top:17px;transform:rotate(-28deg)}.brand-mark:after{top:20px;transform:rotate(28deg)}
+    .eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;color:#dce8ff;text-transform:uppercase}
+    .app-header h1{font-size:21px;line-height:1.25;margin:2px 0 0;letter-spacing:.01em}
+    .status{display:flex;align-items:center;gap:9px;padding:8px 12px;border-radius:999px;background:#ffffff20;border:1px solid #ffffff3d;color:#fff;font-size:13px;white-space:nowrap}
+    .dot{width:8px;height:8px;border-radius:50%;background:#36d399;box-shadow:0 0 0 4px #36d39918,0 0 16px #36d399aa}
+    .toolbar{
+      display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr 1.25fr .65fr auto;gap:10px;
+      padding:12px 18px;background:#ffffffeb;border-bottom:1px solid var(--line);align-items:end;backdrop-filter:blur(18px)
+    }
+    label{display:block;color:#617086;font-size:13px;font-weight:750;margin:0 0 5px 2px}
+    select,input,button{height:40px;border:1px solid #ccd9e8;border-radius:9px;background:#fff;padding:0 11px;color:var(--ink);font-size:14px}
+    select{width:100%;box-shadow:0 1px 2px #18223008}
+    input[type=range]{width:100%;padding:0;accent-color:var(--brand)}
+    .range-line{display:flex;align-items:center;gap:8px}
+    .range-value{min-width:39px;padding:3px 5px;border-radius:6px;background:var(--brand-soft);font-weight:800;color:#2b63d9;text-align:center}
+    button{cursor:pointer;font-weight:700;transition:border-color .18s,background .18s,transform .18s}
+    button:active{transform:translateY(1px)}
+    .primary{border:0;color:#fff;padding:0 18px;background:linear-gradient(135deg,#3978ff,#695cff);box-shadow:0 7px 18px #3978ff35}
+    .primary:hover{box-shadow:0 9px 24px #3978ff50}
+    .main{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:13px;padding:13px;height:auto;min-height:0}
+    .panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;box-shadow:0 8px 28px #1d293912;overflow:hidden}
+    .graph-panel{display:grid;grid-template-rows:auto auto 1fr;min-width:0;background:var(--graph)}
+    .panel-head{min-height:58px;padding:10px 14px 10px 17px;display:flex;justify-content:space-between;align-items:center;gap:12px;background:#fff;border-bottom:1px solid var(--line);color:var(--ink)}
+    .panel-title{display:flex;align-items:center;gap:10px;min-width:0}
+    .panel-title:before{content:"";width:3px;height:25px;border-radius:4px;background:linear-gradient(#6c8cff,#5de0c2);box-shadow:0 0 14px #6c8cff}
+    .panel-head h2{font-size:18px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .panel-head small{display:block;color:#718198;font-size:11px;font-weight:650}
+    .head-actions{display:flex;align-items:center;gap:15px}
+    .legend{display:flex;gap:12px;color:#5e6e83;font-size:13px;font-weight:650}
+    .legend span{white-space:nowrap}.legend i{display:inline-block;width:8px;height:8px;border-radius:3px;margin-right:5px;box-shadow:0 0 10px currentColor}
+    .zoom-tools{display:flex;gap:5px;align-items:center}
+    .zoom-tools button{height:32px;min-width:32px;padding:0 8px;color:#40546f;background:#f5f8fc;border-color:#cfdae7}
+    .zoom-tools button:hover{background:#eaf1ff;border-color:#9cb8ed}
+    .zoom-tools span{width:46px;text-align:center;color:#617086;font-size:12px}
+    .timeline{padding:9px 16px;display:flex;gap:9px;align-items:center;background:#f5f8fc;border-bottom:1px solid var(--line);overflow:auto;scrollbar-width:thin}
+    .timeline>span{color:#53667f;white-space:nowrap;font-size:13px;font-weight:800}
+    .timeline button{height:31px;padding:0 12px;font-size:13px;color:#53667f;background:#fff;border-color:#d5dfeb;white-space:nowrap}
+    .timeline button:hover{color:#285ec8;background:#edf3ff;border-color:#adc3ed}
+    .timeline button.active{color:#fff;background:#4777df;border-color:#4777df;box-shadow:0 4px 12px #3978ff2e}
+    #graphWrap{
+      position:relative;min-height:0;overflow:hidden;
+      background:
+        radial-gradient(circle at 50% 47%,#dceaff 0,transparent 31%),
+        radial-gradient(circle at 18% 12%,#dfe7ff88 0,transparent 26%),
+        linear-gradient(#91a6bf18 1px,transparent 1px),
+        linear-gradient(90deg,#91a6bf18 1px,transparent 1px),
+        linear-gradient(145deg,var(--graph-2),var(--graph));
+      background-size:auto,auto,32px 32px,32px 32px,auto
+    }
+    #graphWrap:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle,transparent 52%,#b9c9dc24 100%)}
+    #graph{position:relative;z-index:1;display:block;width:100%;height:100%;min-height:0;touch-action:none;cursor:grab}
+    #graph.dragging{cursor:grabbing}
+    .graph-tip{position:absolute;z-index:2;left:14px;bottom:12px;padding:7px 11px;border-radius:8px;background:#fffffff0;color:#586b83;font-size:12px;border:1px solid #d4deea;pointer-events:none;backdrop-filter:blur(10px);box-shadow:0 4px 14px #263a5410}
+    .edge{fill:none;stroke-linecap:round}.edge.role-edge{stroke:#7089aa;stroke-width:2.2;opacity:.58}.edge.skill-edge{stroke-width:1.45;opacity:.52}
+    .node{cursor:pointer;transition:opacity .2s}.node .node-halo{opacity:.14;filter:blur(12px)}
+    .node .node-shape{filter:drop-shadow(0 7px 9px #31506f24);transition:stroke-width .18s,filter .18s,opacity .18s}
+    .node:hover .node-shape,.node.is-selected .node-shape{stroke-width:3;filter:drop-shadow(0 0 10px var(--node-color)) drop-shadow(0 8px 11px #31506f2e)}
+    .node text{pointer-events:none;text-anchor:middle;dominant-baseline:middle;fill:#20334b;font-size:16px;font-weight:800;letter-spacing:.01em}
+    .node text.node-subtitle{fill:#64758c;font-size:11px;font-weight:700;letter-spacing:.06em}
+    .node-signal{filter:drop-shadow(0 0 6px var(--node-color))}
+    .empty-text{font-size:17px;fill:#64778f;text-anchor:middle;font-weight:750}
+    .right{display:grid;grid-template-rows:auto auto 1fr;background:#fff}
+    .summary{padding:16px;border-bottom:1px solid var(--line);background:linear-gradient(145deg,#fff,#f8faff)}
+    .summary-kicker{color:#5477bf;font-size:10px;font-weight:850;letter-spacing:.14em;text-transform:uppercase}
+    .summary-title{font-size:19px;font-weight:850;margin-top:3px;letter-spacing:-.02em}
+    .summary-note{color:var(--muted);margin-top:3px;font-size:13px}
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:13px}
+    .stat{position:relative;overflow:hidden;background:#f3f6fa;border:1px solid #e9eef4;border-radius:10px;padding:9px 10px}
+    .stat:after{content:"";position:absolute;width:40px;height:40px;border-radius:50%;right:-17px;top:-18px;background:#5487ff18}
+    .stat b{display:block;font-size:18px;line-height:1.2}.stat span{font-size:10px;color:var(--muted)}
+    .detail-head{padding:13px 16px;border-bottom:1px solid var(--line)}
+    .detail-head b{font-size:16px}.detail-head p{margin:3px 0 0;color:var(--muted);font-size:13px}
+    #detail{padding:12px 13px;overflow:auto;scrollbar-color:#c5cfdb transparent;scrollbar-width:thin}
+    .empty{padding:32px 17px;text-align:center;color:var(--muted);background:#f8fafc;border:1px dashed #ccd6e3;border-radius:11px}
+    .empty-icon{display:block;width:34px;height:34px;margin:0 auto 10px;border-radius:10px;background:linear-gradient(135deg,#edf3ff,#eeeaff);color:#5477bf;font-size:18px;line-height:34px}
+    .evidence{border:1px solid var(--line);border-radius:11px;margin-bottom:10px;overflow:hidden;box-shadow:0 3px 12px #16203308}
+    .evidence-top{padding:9px 11px;background:#f7f9fc;display:flex;justify-content:space-between;gap:10px}
+    .evidence-top b{font-size:12px}.tag{font-size:10px;padding:2px 7px;border-radius:10px;background:#e7f8f2;color:#087754;white-space:nowrap}
+    .quote{padding:10px 11px;color:#26364a;border-left:3px solid var(--skill);margin:10px;background:#f4fbf8;font-size:12px}
+    .jd-toggle{border:0;height:auto;padding:0;background:none;color:var(--brand);font-size:11px;font-weight:700}
+    .jd{display:none;padding:0 11px 12px;color:#4b5565;white-space:pre-wrap;max-height:230px;overflow:auto;font-size:11px}
+    .meta{padding:0 11px 10px;color:var(--muted);font-size:10px}
+    .error{position:absolute;z-index:4;inset:20px auto auto 20px;max-width:calc(100% - 40px);padding:13px 15px;border-radius:9px;background:#fff1f0;color:#b42318;border:1px solid #f5b7b1}
+    @media(max-width:1180px){
+      .toolbar{grid-template-columns:repeat(4,1fr)}.main{grid-template-columns:minmax(0,1fr) 320px}
+      .legend{display:none}
+    }
+    @media(max-width:900px){
+      body{display:block;overflow:auto}.app-header{padding:0 15px}.status{max-width:43%;overflow:hidden;text-overflow:ellipsis}.toolbar{grid-template-columns:1fr 1fr;padding:11px}
+      .main{grid-template-columns:1fr;height:auto;padding:10px}.graph-panel{height:720px}.right{height:600px}.head-actions{gap:6px}
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <div><div class="eyebrow">Talent Intelligence Graph</div><h1>信息技术岗位能力知识图谱</h1></div>
+    </div>
+    <div class="status"><i class="dot"></i><span id="status">正在连接 Neo4j</span></div>
+  </header>
+
+  <section class="toolbar" aria-label="图谱筛选">
+    <div><label for="role">中心岗位</label><select id="role"></select></div>
+    <div><label for="stack">技术栈视图</label><select id="stack"><option value="">全部技术栈</option></select></div>
+    <div><label for="level">岗位级别</label><select id="level"><option value="">全部级别</option></select></div>
+    <div><label for="window">数据季度</label><select id="window"><option value="">全量汇总</option></select></div>
+    <div><label>最低 JD 覆盖率</label><div class="range-line"><input id="support" type="range" min="0" max="0.8" step="0.05" value="0"><span class="range-value" id="supportValue">0%</span></div></div>
+    <div><label for="limit">能力点数</label><select id="limit"><option>20</option><option selected>30</option><option>40</option><option>50</option></select></div>
+    <button class="primary" id="refresh">生成视图</button>
+  </section>
+
+  <main class="main">
+    <section class="panel graph-panel">
+      <div class="panel-head">
+        <div class="panel-title"><div><h2 id="graphTitle">岗位能力星图</h2><small>KNOWLEDGE GRAPH EXPLORER</small></div></div>
+        <div class="head-actions">
+          <div class="legend"><span><i style="background:var(--role);color:var(--role)"></i>岗位</span><span><i style="background:var(--category);color:var(--category)"></i>能力模块</span><span><i style="background:var(--skill);color:var(--skill)"></i>能力点</span></div>
+          <div class="zoom-tools"><button id="zoomOut" title="缩小">−</button><span id="zoomValue">100%</span><button id="zoomIn" title="放大">＋</button><button id="zoomReset">适配</button></div>
+        </div>
+      </div>
+      <div class="timeline"><span>时间切片</span><div id="timelineButtons" style="display:flex;gap:7px"></div></div>
+      <div id="graphWrap">
+        <svg id="graph" viewBox="-900 -650 1800 1300" preserveAspectRatio="xMidYMid meet" aria-label="岗位能力知识图谱"><g id="viewport"></g></svg>
+        <div class="graph-tip">滚轮缩放 · 拖动空白平移 · 点击能力卡片回溯 JD 证据</div>
+      </div>
+    </section>
+
+    <aside class="panel right">
+      <div class="summary">
+        <div class="summary-kicker">Current Perspective</div><div class="summary-title" id="summaryTitle">岗位图谱</div>
+        <div class="summary-note" id="summaryNote">请选择岗位和视图条件。</div>
+        <div class="stats"><div class="stat"><b id="jdCount">0</b><span>筛选后 JD</span></div><div class="stat"><b id="skillCount">0</b><span>能力点</span></div><div class="stat"><b id="evidenceCount">0</b><span>原文证据</span></div></div>
+      </div>
+      <div class="detail-head"><b id="detailTitle">节点检查器</b><p id="detailSubtitle">选择能力卡片，查看它来自哪些招聘原文</p></div>
+      <div id="detail"><div class="empty"><span class="empty-icon">⌁</span>图谱以岗位为中心，向外依次展开能力模块和能力点。</div></div>
+    </aside>
+  </main>
+
+  <script>
+    const $=id=>document.getElementById(id);
+    const SVG_NS='http://www.w3.org/2000/svg';
+    const PALETTE=['#39d8c1','#6f8cff','#b678ff','#ffb454','#ff758f','#49b5ff'];
+    let graphData={nodes:[],edges:[]};
+    let view={x:0,y:0,scale:1};
+    let baseViewBox={x:-900,y:-650,w:1800,h:1300};
+    let dragging=false,dragPoint=null,selectedNodeId='';
+
+    const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    const svgEl=name=>document.createElementNS(SVG_NS,name);
+    async function api(path){const response=await fetch(path);const data=await response.json();if(!response.ok)throw new Error(data.error||'请求失败');return data}
+
+    async function init(){
+      try{
+        const [health,facets,roles]=await Promise.all([api('/api/health'),api('/api/v1/facets'),api('/api/v1/roles')]);
+        $('status').textContent=`Neo4j 在线 · ${(health.counts.jds||0).toLocaleString()} 条 JD`;
+        $('stack').innerHTML='<option value="">全部技术栈</option>'+facets.stacks.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');
+        $('level').innerHTML='<option value="">全部级别</option>'+facets.levels.map(value=>`<option value="${esc(value.level_name)}">${esc(value.level_name)}</option>`).join('');
+        $('role').innerHTML=roles.map(role=>`<option value="${esc(role.role_id)}" ${role.role_name==='产品经理'?'selected':''}>${role.family_name?esc(role.family_name)+'｜':''}${esc(role.role_name)}</option>`).join('');
+        $('support').oninput=()=>{$('supportValue').textContent=Math.round(Number($('support').value)*100)+'%'};
+        ['stack','level','window','limit'].forEach(id=>$(id).onchange=loadGraph);
+        $('role').onchange=()=>{$('window').value='';loadGraph()};
+        $('refresh').onclick=loadGraph;
+        setupZoom();
+        await loadGraph();
+      }catch(error){showError(error)}
+    }
+
+    async function loadGraph(){
+      try{
+        $('status').textContent='正在生成岗位视图…';
+        const params=new URLSearchParams({role_id:$('role').value,stack:$('stack').value,level:$('level').value,time_window:$('window').value,min_support:$('support').value,skill_limit:$('limit').value});
+        graphData=await api('/api/v1/graph/panorama?'+params);
+        syncWindows(graphData.available_windows||[]);
+        renderTimeline(graphData.available_windows||[]);
+        selectedNodeId='';
+        resetZoom();
+        renderGraph();
+        renderSummary();
+        $('status').textContent=`Neo4j 在线 · ${(graphData.stats.filtered_jds||0).toLocaleString()} 条当前 JD`;
+      }catch(error){showError(error)}
+    }
+
+    function syncWindows(windows){
+      const current=$('window').value;
+      $('window').innerHTML='<option value="">全量汇总</option>'+windows.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');
+      if(windows.includes(current))$('window').value=current;
+    }
+    function renderTimeline(windows){
+      $('timelineButtons').innerHTML=['',...windows].map(value=>`<button class="${$('window').value===value?'active':''}" data-window="${esc(value)}">${value||'全量'}</button>`).join('');
+      $('timelineButtons').querySelectorAll('button').forEach(button=>button.onclick=()=>{$('window').value=button.dataset.window;loadGraph()});
+    }
+    function renderSummary(){
+      const root=graphData.nodes.find(node=>node.type==='role');
+      const filters=graphData.filters||{};
+      const parts=[filters.stack||'全部技术栈',filters.level||'全部级别',filters.effective_time_window||'全部时间'];
+      $('graphTitle').textContent=(root?.label||'岗位')+' · 能力星图';
+      $('summaryTitle').textContent=root?.label||'岗位图谱';
+      $('summaryNote').textContent=parts.join(' · ');
+      $('jdCount').textContent=(graphData.stats.filtered_jds||0).toLocaleString();
+      $('skillCount').textContent=(graphData.stats.skills||0).toLocaleString();
+      $('evidenceCount').textContent=(graphData.stats.evidence||0).toLocaleString();
+    }
+
+    function visualLength(text){return [...String(text||'')].reduce((sum,ch)=>sum+(/[^\x00-\xff]/.test(ch)?1.7:1),0)}
+    function splitLabel(text,maxUnits=17){
+      const chars=[...String(text||'')],lines=[''];let units=0;
+      for(const ch of chars){
+        const size=/[^\x00-\xff]/.test(ch)?1.7:1;
+        if(units+size>maxUnits&&lines.length===1){lines.push('');units=0}
+        if(lines.length>2)break;
+        lines[lines.length-1]+=ch;units+=size;
+      }
+      if(lines.length===2&&lines.join('').length<chars.length)lines[1]=lines[1].slice(0,-1)+'…';
+      return lines;
+    }
+    function nodeBox(node){
+      if(node.type==='role')return{w:240,h:94,rx:24};
+      if(node.type==='category')return{w:184,h:74,rx:19};
+      const lines=splitLabel(node.label);
+      return{w:Math.max(148,Math.min(214,visualLength(node.label)*8+40)),h:lines.length>1?68:54,rx:14};
+    }
+
+    function buildLayout(root,categories,skills){
+      const positions=new Map();
+      positions.set(root.id,{x:0,y:0,depth:0,...nodeBox(root),color:'#ff7a45'});
+      const count=Math.max(categories.length,1);
+      const categoryRadius=count<=3?235:260;
+      const sector=2*Math.PI/count;
+      const usableSpan=Math.min(1.14,sector*.86);
+      categories.forEach((category,index)=>{
+        const angle=-Math.PI/2+sector*index;
+        const color=PALETTE[index%PALETTE.length];
+        positions.set(category.id,{x:Math.cos(angle)*categoryRadius,y:Math.sin(angle)*categoryRadius,depth:1,angle,color,...nodeBox(category)});
+        const categorySkills=skills.filter(skill=>skill.category===category.label);
+        let cursor=0,ring=0;
+        while(cursor<categorySkills.length){
+          const radius=360+ring*110;
+          const capacity=Math.max(3,Math.floor(radius*usableSpan/174)+1);
+          const items=categorySkills.slice(cursor,cursor+capacity);
+          const usedSpan=items.length===1?0:Math.min(usableSpan,(items.length-1)*174/radius);
+          items.forEach((skill,slot)=>{
+            const skillAngle=items.length===1?angle:angle-usedSpan/2+usedSpan*slot/(items.length-1);
+            positions.set(skill.id,{x:Math.cos(skillAngle)*radius,y:Math.sin(skillAngle)*radius,depth:2,angle:skillAngle,color,...nodeBox(skill)});
+          });
+          cursor+=items.length;ring++;
+        }
+      });
+      relaxLayout(positions);
+      return positions;
+    }
+
+    function relaxLayout(positions){
+      const points=[...positions.values()];
+      points.forEach(point=>{point.anchorX=point.x;point.anchorY=point.y});
+      for(let iteration=0;iteration<280;iteration++){
+        for(let i=0;i<points.length;i++){
+          for(let j=i+1;j<points.length;j++){
+            const a=points[i],b=points[j];
+            let dx=b.x-a.x,dy=b.y-a.y;
+            if(Math.abs(dx)<.001){dx=(i%2?1:-1)*.01}
+            if(Math.abs(dy)<.001){dy=(j%2?1:-1)*.01}
+            const overlapX=(a.w+b.w)/2+16-Math.abs(dx);
+            const overlapY=(a.h+b.h)/2+15-Math.abs(dy);
+            if(overlapX<=0||overlapY<=0)continue;
+            const weightA=a.depth===0?0:(a.depth===1?0.3:1);
+            const weightB=b.depth===0?0:(b.depth===1?0.3:1);
+            const total=weightA+weightB;
+            if(!total)continue;
+            if(overlapX<overlapY){
+              const push=overlapX+.35,sign=dx>0?1:-1;
+              a.x-=sign*push*weightA/total;b.x+=sign*push*weightB/total;
+            }else{
+              const push=overlapY+.35,sign=dy>0?1:-1;
+              a.y-=sign*push*weightA/total;b.y+=sign*push*weightB/total;
+            }
+          }
+        }
+        if(iteration<190){
+          points.forEach(point=>{
+            const strength=point.depth===0?1:(point.depth===1?0.09:0.014);
+            point.x+=(point.anchorX-point.x)*strength;
+            point.y+=(point.anchorY-point.y)*strength;
+          });
+        }
+      }
+      const root=points.find(point=>point.depth===0);
+      if(root){root.x=0;root.y=0}
+    }
+
+    function renderGraph(){
+      const viewport=$('viewport');
+      viewport.innerHTML='';
+      const root=graphData.nodes.find(node=>node.type==='role');
+      if(!root)return;
+      const categories=graphData.nodes.filter(node=>node.type==='category');
+      const skills=graphData.nodes.filter(node=>node.type==='skill');
+      const positions=buildLayout(root,categories,skills);
+      const categoryColors=new Map(categories.map(category=>[category.label,positions.get(category.id)?.color||PALETTE[0]]));
+
+      graphData.edges.forEach(edge=>{
+        const from=positions.get(edge.source),to=positions.get(edge.target);
+        if(!from||!to)return;
+        const path=svgEl('path');
+        const dx=to.x-from.x,dy=to.y-from.y;
+        const bend=edge.target.startsWith('skill:')?0.035:0.06;
+        const cx=(from.x+to.x)/2-dy*bend,cy=(from.y+to.y)/2+dx*bend;
+        path.setAttribute('d',`M ${from.x} ${from.y} Q ${cx} ${cy} ${to.x} ${to.y}`);
+        path.setAttribute('class','edge '+(edge.target.startsWith('skill:')?'skill-edge':'role-edge'));
+        const target=graphData.nodes.find(node=>node.id===edge.target);
+        path.style.stroke=target?.type==='skill'?(categoryColors.get(target.category)||PALETTE[0]):(to.color||'#6e86aa');
+        viewport.appendChild(path);
+      });
+
+      [...positions.entries()].sort((a,b)=>b[1].depth-a[1].depth).forEach(([id,position])=>{
+        drawNode(viewport,graphData.nodes.find(node=>node.id===id),position,skills);
+      });
+      if(!skills.length){
+        const text=svgEl('text');text.setAttribute('class','empty-text');text.setAttribute('x','0');text.setAttribute('y','125');
+        text.textContent='当前筛选条件下没有可展示的能力点';viewport.appendChild(text);
+      }
+      fitGraph(positions);
+      applyView();
+    }
+
+    function drawNode(viewport,node,position,skills){
+      if(!node)return;
+      const group=svgEl('g');
+      group.setAttribute('class','node'+(selectedNodeId===node.id?' is-selected':''));
+      group.setAttribute('data-node-id',node.id);
+      group.setAttribute('data-node-type',node.type);
+      group.setAttribute('transform',`translate(${position.x} ${position.y})`);
+      group.style.setProperty('--node-color',position.color);
+
+      const halo=svgEl('rect');
+      halo.setAttribute('class','node-halo');halo.setAttribute('x',-position.w/2-5);halo.setAttribute('y',-position.h/2-5);
+      halo.setAttribute('width',position.w+10);halo.setAttribute('height',position.h+10);halo.setAttribute('rx',position.rx+5);halo.setAttribute('fill',position.color);
+      group.appendChild(halo);
+
+      const shape=svgEl('rect');
+      shape.setAttribute('class','node-shape');shape.setAttribute('x',-position.w/2);shape.setAttribute('y',-position.h/2);
+      shape.setAttribute('width',position.w);shape.setAttribute('height',position.h);shape.setAttribute('rx',position.rx);
+      if(node.type==='skill'){
+        shape.setAttribute('fill','#ffffff');shape.setAttribute('stroke',position.color);shape.setAttribute('stroke-width','1.7');shape.setAttribute('fill-opacity','.98');
+      }else if(node.type==='category'){
+        shape.setAttribute('fill',position.color);shape.setAttribute('fill-opacity','.13');shape.setAttribute('stroke',position.color);shape.setAttribute('stroke-width','2');
+      }else{
+        shape.setAttribute('fill','#fff7f2');shape.setAttribute('stroke',position.color);shape.setAttribute('stroke-width','2.4');
+      }
+      group.appendChild(shape);
+
+      if(node.type==='skill'){
+        const signal=svgEl('circle');signal.setAttribute('class','node-signal');signal.setAttribute('cx',-position.w/2+16);signal.setAttribute('cy','0');signal.setAttribute('r','3.5');signal.setAttribute('fill',position.color);group.appendChild(signal);
+      }
+
+      const lines=splitLabel(node.label,node.type==='role'?22:17);
+      const label=svgEl('text');
+      const labelOffset=node.type==='category'||node.type==='role'?-6:0;
+      lines.forEach((line,index)=>{
+        const tspan=svgEl('tspan');tspan.setAttribute('x',node.type==='skill'?5:'0');
+        tspan.setAttribute('y',labelOffset+(index-(lines.length-1)/2)*19);tspan.textContent=line;label.appendChild(tspan);
+      });
+      group.appendChild(label);
+
+      if(node.type!=='skill'){
+        const subtitle=svgEl('text');subtitle.setAttribute('class','node-subtitle');subtitle.setAttribute('x','0');subtitle.setAttribute('y',node.type==='role'?22:18);
+        subtitle.textContent=node.type==='role'?'CENTRAL ROLE':`${skills.filter(skill=>skill.category===node.label).length} ABILITIES`;
+        group.appendChild(subtitle);
+      }
+
+      const title=svgEl('title');title.textContent=node.type==='skill'?`${node.label} · 点击查看 JD 证据`:node.label;group.appendChild(title);
+      group.onclick=event=>{event.stopPropagation();selectedNodeId=node.id;document.querySelectorAll('.node').forEach(item=>item.classList.toggle('is-selected',item.dataset.nodeId===node.id));selectNode(node)};
+      viewport.appendChild(group);
+    }
+
+    function fitGraph(positions){
+      const values=[...positions.values()];
+      if(!values.length)return;
+      const minX=Math.min(...values.map(p=>p.x-p.w/2)),maxX=Math.max(...values.map(p=>p.x+p.w/2));
+      const minY=Math.min(...values.map(p=>p.y-p.h/2)),maxY=Math.max(...values.map(p=>p.y+p.h/2));
+      let width=Math.max(1180,maxX-minX+140),height=Math.max(820,maxY-minY+140);
+      const wrap=$('graphWrap'),aspect=Math.max(1,wrap.clientWidth/Math.max(wrap.clientHeight,1));
+      if(width/height<aspect)width=height*aspect;else height=width/aspect;
+      const centerX=(minX+maxX)/2,centerY=(minY+maxY)/2;
+      baseViewBox={x:centerX-width/2,y:centerY-height/2,w:width,h:height};
+      $('graph').setAttribute('viewBox',`${baseViewBox.x} ${baseViewBox.y} ${baseViewBox.w} ${baseViewBox.h}`);
+    }
+
+    function selectNode(node){
+      if(node.type==='skill'){loadEvidence(node);return}
+      if(node.type==='category'){
+        $('detailTitle').textContent=node.label;$('detailSubtitle').textContent='能力模块';
+        const count=graphData.nodes.filter(item=>item.type==='skill'&&item.category===node.label).length;
+        $('detail').innerHTML=`<div class="empty"><span class="empty-icon">◎</span>该模块包含 <b>${count}</b> 个能力点。选择外围能力卡片即可查看对应 JD 原文。</div>`;return;
+      }
+      $('detailTitle').textContent=node.label;$('detailSubtitle').textContent='当前中心岗位';
+      $('detail').innerHTML='<div class="empty"><span class="empty-icon">⌁</span>使用上方技术栈、岗位级别和季度筛选器，切换这个岗位的能力视图。</div>';
+    }
+
+    async function loadEvidence(node){
+      $('detailTitle').textContent=node.label;
+      $('detailSubtitle').textContent=`${roleName()} · ${node.stack||'全部技术栈'} · ${$('level').value||'全部级别'} · ${node.time_window||'全量'}`;
+      $('detail').innerHTML='<div class="empty"><span class="empty-icon">···</span>正在读取当前视图对应的 JD 原文…</div>';
+      try{
+        const params=new URLSearchParams({role_id:node.role_id,time_window:node.time_window||'',level:$('level').value,stack:$('stack').value,limit:'30'});
+        const data=await api(`/api/v1/skills/${encodeURIComponent(node.entity_id)}/evidence?${params}`);
+        if(!data.evidence.length){$('detail').innerHTML='<div class="empty">当前筛选条件下没有可回溯的 JD 原文。</div>';return}
+        $('detail').innerHTML=data.evidence.map((item,index)=>{
+          const status=item.evidence_status==='VERIFIED'?'已回标验证':item.evidence_status==='LOW_CONFIDENCE'?'模糊回标':'能力分析提取';
+          return `<article class="evidence"><div class="evidence-top"><b>${esc(item.title)}</b><span class="tag">${status}</span></div><div class="quote">${esc(item.evidence_quote)}</div><div class="meta">${esc(item.company_name)} · ${esc(item.level_name||'级别未注明')} · ${esc(item.tech_stack||'技术栈未注明')} · ${esc(item.time_window||'时间未注明')}</div><div style="padding:0 11px 10px"><button class="jd-toggle" onclick="toggleJD(${index})">查看完整 JD 原文</button></div><div class="jd" id="jd-${index}">${esc(item.description||item.tags)}</div></article>`;
+        }).join('');
+      }catch(error){showError(error,'detail')}
+    }
+
+    function roleName(){return graphData.nodes.find(node=>node.type==='role')?.label||'当前岗位'}
+    function toggleJD(index){const box=$('jd-'+index);box.style.display=box.style.display==='block'?'none':'block'}
+    function setupZoom(){
+      const svg=$('graph');
+      $('zoomIn').onclick=()=>zoomBy(1.2);$('zoomOut').onclick=()=>zoomBy(1/1.2);$('zoomReset').onclick=resetZoom;
+      svg.addEventListener('wheel',event=>{event.preventDefault();zoomBy(event.deltaY<0?1.13:1/1.13)},{passive:false});
+      svg.addEventListener('pointerdown',event=>{
+        if(event.target.closest?.('.node'))return;
+        dragging=true;dragPoint={x:event.clientX,y:event.clientY};svg.classList.add('dragging');svg.setPointerCapture(event.pointerId);
+      });
+      svg.addEventListener('pointermove',event=>{
+        if(!dragging)return;
+        const factor=baseViewBox.w/svg.clientWidth/view.scale;
+        view.x+=(event.clientX-dragPoint.x)*factor;view.y+=(event.clientY-dragPoint.y)*factor;
+        dragPoint={x:event.clientX,y:event.clientY};applyView();
+      });
+      const stop=()=>{dragging=false;svg.classList.remove('dragging')};
+      svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop);
+    }
+    function zoomBy(factor){view.scale=Math.max(.45,Math.min(3.5,view.scale*factor));applyView()}
+    function resetZoom(){view={x:0,y:0,scale:1};applyView()}
+    function applyView(){$('viewport').setAttribute('transform',`translate(${view.x} ${view.y}) scale(${view.scale})`);$('zoomValue').textContent=Math.round(view.scale*100)+'%'}
+    function showError(error,target='graph'){
+      const html=`<div class="error">${esc(error.message)}</div>`;
+      if(target==='detail')$('detail').innerHTML=html;else{$('graphWrap').insertAdjacentHTML('beforeend',html);$('status').textContent='连接失败'}
+    }
+    init();
+  </script>
+</body>
+</html>

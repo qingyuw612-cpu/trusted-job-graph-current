@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import time
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,7 @@ PLATFORM_LABELS = {
     "zhilian": "智联招聘",
     "liepin": "猎聘",
 }
+KEYWORD_CONFIG = Path(__file__).resolve().parent / "config" / "job_radar_keywords.json"
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,8 @@ class RunOptions:
     pipeline_limit: int
     neo4j_config: Path
     skip_new_role_discovery: bool
+    scan_mode: str = "legacy"
+    collection_limit: int = 0
 
 
 def default_source_dir() -> Path:
@@ -60,7 +64,9 @@ def platform_python(platform: str, default: str) -> str:
     return os.environ.get(env_name, default)
 
 
-def build_command(platform: str, options: RunOptions) -> tuple[list[str], Path]:
+def build_command(
+    platform: str, options: RunOptions, keyword: str | None = None
+) -> tuple[list[str], Path]:
     python = platform_python(platform, options.python_executable)
     state_dir = options.output_root / "state" / platform
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -79,8 +85,9 @@ def build_command(platform: str, options: RunOptions) -> tuple[list[str], Path]:
             command.extend(("--headless", "--skip-login"))
         if options.fresh_scan:
             command.append("--reset-checkpoint")
-        if options.keyword:
-            command.extend(("--keyword", options.keyword))
+        selected_keyword = keyword if keyword is not None else options.keyword
+        if selected_keyword:
+            command.extend(("--keyword", selected_keyword))
         if options.city:
             command.extend(("--city", options.city))
         return command, output
@@ -101,8 +108,9 @@ def build_command(platform: str, options: RunOptions) -> tuple[list[str], Path]:
             command.append("--skip-login")
         if options.fresh_scan:
             command.append("--no-resume")
-        if options.keyword:
-            command.extend(("--keyword", options.keyword))
+        selected_keyword = keyword if keyword is not None else options.keyword
+        if selected_keyword:
+            command.extend(("--keyword", selected_keyword))
         if options.city:
             command.extend(("--city", options.city))
         return command, output
@@ -124,8 +132,9 @@ def build_command(platform: str, options: RunOptions) -> tuple[list[str], Path]:
         ]
         if options.fresh_scan:
             command.append("--no-resume")
-        if options.keyword:
-            command.extend(("--target-keyword", options.keyword))
+        selected_keyword = keyword if keyword is not None else options.keyword
+        if selected_keyword:
+            command.extend(("--target-keyword", selected_keyword))
         if options.city:
             command.extend(("--city", options.city))
         return command, output
@@ -141,6 +150,44 @@ def csv_row_count(path: Path) -> int | None:
             return sum(1 for _ in csv.DictReader(handle))
     except (OSError, UnicodeError, csv.Error):
         return None
+
+
+def load_keyword_config(path: Path = KEYWORD_CONFIG) -> dict:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    full = tuple(str(item).strip() for item in data.get("full_keywords", []) if str(item).strip())
+    quick = tuple(str(item).strip() for item in data.get("quick_keywords", []) if str(item).strip())
+    if not full or not quick or not set(quick).issubset(full):
+        raise ValueError("岗位雷达关键词配置无效")
+    return {**data, "full_keywords": full, "quick_keywords": quick}
+
+
+def scan_keywords(options: RunOptions) -> tuple[str | None, ...]:
+    if options.scan_mode == "legacy":
+        return (options.keyword,)
+    config = load_keyword_config()
+    if options.scan_mode == "target":
+        if not options.keyword or options.keyword not in config["full_keywords"]:
+            raise ValueError("指定岗位必须来自统一关键词池")
+        return (options.keyword,)
+    key = "quick_keywords" if options.scan_mode == "quick" else "full_keywords"
+    return tuple(config[key])
+
+
+def write_capped_csv(source: Path, target: Path, limit: int) -> int:
+    """Write at most the newest ``limit`` rows for guarded system import."""
+    limit = max(0, limit)
+    with source.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = list(reader.fieldnames or [])
+        rows = deque(reader, maxlen=limit)
+    if not fieldnames:
+        raise ValueError(f"采集结果缺少 CSV 表头：{source}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+    return len(rows)
 
 
 def safe_command(command: Sequence[str]) -> list[str]:
@@ -186,10 +233,12 @@ def build_system_finalize_command(options: RunOptions, work_dir: Path | None = N
     return command
 
 
-def run_logged(command: Sequence[str], log_path: Path, cwd: Path) -> tuple[int, float]:
+def run_logged(
+    command: Sequence[str], log_path: Path, cwd: Path, *, append: bool = False
+) -> tuple[int, float]:
     started = time.monotonic()
     try:
-        with log_path.open("w", encoding="utf-8", newline="") as log:
+        with log_path.open("a" if append else "w", encoding="utf-8", newline="") as log:
             process = subprocess.run(
                 list(command),
                 cwd=cwd,
@@ -225,13 +274,16 @@ def run_cycle(options: RunOptions) -> tuple[int, Path]:
             "keyword": options.keyword,
             "fresh_scan": options.fresh_scan,
             "reuse_output": options.reuse_output,
+            "scan_mode": options.scan_mode,
+            "collection_limit": options.collection_limit,
         },
         "platforms": [],
     }
     overall_code = 0
 
+    keywords = scan_keywords(options)
     for platform in options.platforms:
-        command, output = build_command(platform, options)
+        command, output = build_command(platform, options, keywords[0])
         log_path = run_dir / f"{platform}.log"
         before = csv_row_count(output) or 0
         item = {
@@ -241,6 +293,9 @@ def run_cycle(options: RunOptions) -> tuple[int, Path]:
             "output": str(output),
             "log": str(log_path),
             "rows_before": before,
+            "scan_mode": options.scan_mode,
+            "keywords_planned": len(keywords),
+            "keywords_scanned": 0,
         }
         if options.reuse_output:
             after = csv_row_count(output)
@@ -256,18 +311,44 @@ def run_cycle(options: RunOptions) -> tuple[int, Path]:
         elif options.dry_run:
             item.update(status="planned", return_code=None, rows_after=before, rows_added=0)
         else:
-            code, duration = run_logged(command, log_path, options.source_dir)
-            status = "success" if code == 0 else "failed"
+            code = 0
+            duration = 0.0
+            for index, selected_keyword in enumerate(keywords):
+                keyword_command, output = build_command(platform, options, selected_keyword)
+                item["command"] = safe_command(keyword_command)
+                step_code, step_duration = run_logged(
+                    keyword_command,
+                    log_path,
+                    options.source_dir,
+                    append=index > 0,
+                )
+                duration += step_duration
+                item["keywords_scanned"] = index + 1
+                if step_code != 0:
+                    code = step_code
+                    break
+                current_rows = csv_row_count(output) or before
+                if options.collection_limit and current_rows - before >= options.collection_limit:
+                    item["stopped_at_collection_limit"] = True
+                    break
             after = csv_row_count(output)
+            status = "success" if code == 0 else "failed"
+            rows_added = max(0, (after or 0) - before)
             item.update(
                 status=status,
                 return_code=code,
                 duration_seconds=duration,
                 rows_after=after,
-                rows_added=max(0, (after or 0) - before),
+                rows_added=rows_added,
             )
             if code != 0:
                 overall_code = 1
+            if code == 0 and options.collection_limit and output.is_file():
+                capped = run_dir / f"{platform}_capped.csv"
+                item["integration_source"] = str(capped)
+                item["rows_selected_for_import"] = write_capped_csv(
+                    output, capped, min(rows_added, options.collection_limit)
+                )
         manifest["platforms"].append(item)
 
     if options.system_import:
@@ -286,7 +367,7 @@ def run_cycle(options: RunOptions) -> tuple[int, Path]:
         import_failed = not eligible
         for item in manifest["platforms"]:
             platform = item["platform"]
-            output = Path(item["output"])
+            output = Path(item.get("integration_source") or item["output"])
             command = build_system_ingest_command(platform, output, options)
             log_path = run_dir / f"system_import_{platform}.log"
             step = {
@@ -380,6 +461,8 @@ def options_from_args(args: argparse.Namespace) -> RunOptions:
         pipeline_limit=args.pipeline_limit,
         neo4j_config=Path(args.neo4j_config).expanduser().resolve(),
         skip_new_role_discovery=args.skip_new_role_discovery,
+        scan_mode=args.scan_mode,
+        collection_limit=args.collection_limit,
     )
 
 
@@ -394,6 +477,11 @@ def validate(options: RunOptions) -> None:
         raise ValueError("--reuse-output 仅用于把已有采集结果接入系统")
     if options.pipeline_limit < 0:
         raise ValueError("--pipeline-limit 不能小于 0")
+    if options.scan_mode not in {"legacy", "full", "quick", "target"}:
+        raise ValueError("--scan-mode 不受支持")
+    if options.collection_limit < 0:
+        raise ValueError("--collection-limit 不能小于 0")
+    scan_keywords(options)
     if options.system_import and not options.neo4j_config.is_file():
         raise FileNotFoundError(f"Neo4j 配置不存在：{options.neo4j_config}")
     missing = [str(options.source_dir / name) for name in (
@@ -411,6 +499,18 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--pages", type=int, default=20, help="每岗位、城市最多页数，1-20")
     parser.add_argument("--city", choices=("北京", "上海", "广州", "深圳"))
     parser.add_argument("--keyword", help="仅试跑一个内置岗位关键词")
+    parser.add_argument(
+        "--scan-mode",
+        choices=("legacy", "full", "quick", "target"),
+        default="legacy",
+        help="关键词巡检模式；legacy 保持旧行为，full/quick 使用统一关键词池",
+    )
+    parser.add_argument(
+        "--collection-limit",
+        type=int,
+        default=0,
+        help="本轮每个平台新增 JD 达到该数量后停止继续遍历关键词；0 表示不限",
+    )
     parser.add_argument("--fresh-scan", action=argparse.BooleanOptionalAction, default=False, help="忽略已完成页重新扫描，职位仍去重")
     parser.add_argument("--non-interactive", action="store_true", help="不等待 51job/智联手工登录；猎聘仍需已有登录态")
     parser.add_argument("--dry-run", action="store_true", help="只展示计划，不启动爬虫")

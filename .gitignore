@@ -28,6 +28,7 @@
 !/config/
 /config/*
 !/config/it_domain_filter.json
+!/config/job_radar_keywords.json
 !/config/neo4j_connection.example.json
 
 # Core graph processing and panorama frontend
@@ -102,3 +103,10 @@
 /.coverage
 /htmlcov/
 /.pytest_cache/
+
+# Integrated demo services and unified frontend
+!/INTEGRATION.md
+!/resume-analysis-agent/
+!/resume-analysis-agent/**
+!/qianduan/
+!/qianduan/**

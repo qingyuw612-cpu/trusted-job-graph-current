@@ -20,6 +20,20 @@ python job_crawler_runner.py run --keyword 产品经理 --city 北京 --pages 1 
 python job_crawler_runner.py run --keyword 产品经理 --city 北京 --pages 1
 ```
 
+统一关键词池巡检（73 个岗位关键词、北上广深，每个平台新增 JD 达到 300 条后停止继续遍历）：
+
+```powershell
+python job_crawler_runner.py run --scan-mode full --pages 1 --collection-limit 300
+```
+
+快速抽样巡检使用关键词池中的 12 个代表岗位：
+
+```powershell
+python job_crawler_runner.py run --scan-mode quick --pages 1 --collection-limit 100
+```
+
+`--scan-mode target` 必须与 `--keyword` 一起使用，且关键词必须来自 `config/job_radar_keywords.json`。旧命令不传 `--scan-mode` 时保持原有行为。
+
 全量每 12 小时重扫一次：
 
 ```powershell

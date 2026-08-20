@@ -11,6 +11,8 @@ from job_crawler_runner import (
     build_system_finalize_command,
     build_system_ingest_command,
     run_cycle,
+    scan_keywords,
+    write_capped_csv,
 )
 
 
@@ -79,3 +81,20 @@ def test_system_handoff_uses_guarded_partial_import_then_one_publish(tmp_path):
     assert "--publish" not in ingest
     assert "--skip-import" in finalize
     assert "--publish" in finalize
+
+
+def test_full_and_quick_modes_use_shared_keyword_pool(tmp_path):
+    full = make_options(tmp_path, scan_mode="full")
+    quick = make_options(tmp_path, scan_mode="quick")
+    assert len(scan_keywords(full)) == 73
+    assert len(scan_keywords(quick)) == 12
+    assert set(scan_keywords(quick)).issubset(scan_keywords(full))
+
+
+def test_capped_csv_contains_only_newest_bounded_rows(tmp_path):
+    source = tmp_path / "source.csv"
+    source.write_text("id,name\n1,A\n2,B\n3,C\n4,D\n", encoding="utf-8")
+    target = tmp_path / "capped.csv"
+    assert write_capped_csv(source, target, 2) == 2
+    rows = target.read_text(encoding="utf-8-sig").splitlines()
+    assert rows == ["id,name", "3,C", "4,D"]

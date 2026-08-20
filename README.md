@@ -4,6 +4,17 @@
 
 > **公开仓库边界**：本仓库只包含处理逻辑、算法规则、安全的示例配置和前端源码；不包含任何原始招聘数据、运行结果、模型权重、API Key、Neo4j 密码或本机配置。
 
+## 完整集成版
+
+仓库现已包含岗位图谱、简历分析服务和统一前端：
+
+- 仓库根目录：岗位图谱与 Neo4j API
+- `resume-analysis-agent/`：简历分析与人岗匹配 API
+- `qianduan/html-main2/`：统一演示前端
+- `start_demo.py`：三个服务的统一启动入口
+
+首次配置、安装和启动方法见 [INTEGRATION.md](INTEGRATION.md)。本机虚拟环境、真实连接配置和原始数据不会提交到仓库。
+
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![Data](https://img.shields.io/badge/data-not%20included-informational)
 ![Storage](https://img.shields.io/badge/storage-SQLite%20%7C%20Neo4j-4581C3)

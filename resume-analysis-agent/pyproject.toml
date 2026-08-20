@@ -1,0 +1,36 @@
+[project]
+name = "resume-analysis-agent"
+version = "0.3.0"
+description = "MCP server for resume role-matching analysis (keyword hit -> LLM review -> gap analysis)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "mcp>=1.0",
+    "langchain-openai>=0.3",
+    "markitdown[pdf]>=0.1",
+    "docx2txt>=0.8",
+    "pdfplumber>=0.11",
+    "python-dotenv>=1.0",
+    "neo4j>=5.0",
+    "matplotlib>=3.8",
+    "numpy>=1.26",
+    "python-multipart>=0.0.9",
+    "uvicorn[standard]>=0.30",
+]
+
+# 代码以源码方式运行（python mcp_server.py / python src/main.py），不打包成 Python 包；
+# pip install -e . 仅用于安装 dependencies。
+[tool.setuptools]
+packages = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+resume-mcp = "mcp_server:main"

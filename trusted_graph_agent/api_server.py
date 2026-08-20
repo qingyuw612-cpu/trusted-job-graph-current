@@ -8,6 +8,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from .radar_service import RadarBusyError, RadarRunManager
+
 
 class GraphRepository:
     def __init__(self, database_path: Path):
@@ -477,6 +479,7 @@ def CounterLike(values) -> dict[str, int]:
 class GraphRequestHandler(BaseHTTPRequestHandler):
     repository: GraphRepository
     page_path: Path
+    radar_manager = None
 
     def do_OPTIONS(self) -> None:  # noqa: N802
         self.send_response(HTTPStatus.NO_CONTENT)
@@ -535,6 +538,26 @@ class GraphRequestHandler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/v1/review/tasks":
                 self._json(self.repository.review_tasks(_first(query, "status", "PENDING"), _int(_first(query, "limit"), 100)))
+            elif path == "/api/v1/radar/status":
+                if self.radar_manager is None:
+                    self._json({"error": "radar_unavailable"}, HTTPStatus.SERVICE_UNAVAILABLE)
+                else:
+                    self._json(self.radar_manager.status())
+            elif path == "/api/v1/radar/config":
+                if self.radar_manager is None:
+                    self._json({"error": "radar_unavailable"}, HTTPStatus.SERVICE_UNAVAILABLE)
+                else:
+                    self._json(self.radar_manager.configuration())
+            elif path == "/api/v1/radar/results/latest":
+                if self.radar_manager is None:
+                    self._json({"error": "radar_unavailable"}, HTTPStatus.SERVICE_UNAVAILABLE)
+                else:
+                    self._json(self.radar_manager.latest_discovery_result())
+            elif path == "/api/v1/evolution/results/latest":
+                if self.radar_manager is None:
+                    self._json({"error": "evolution_unavailable"}, HTTPStatus.SERVICE_UNAVAILABLE)
+                else:
+                    self._json(self.radar_manager.latest_evolution_result())
             else:
                 self._json({"error": "not_found", "path": path}, HTTPStatus.NOT_FOUND)
         except KeyError as error:
@@ -545,7 +568,19 @@ class GraphRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = unquote(urlparse(self.path).path)
         try:
-            if path.startswith("/api/v1/review/tasks/") and path.endswith("/decision"):
+            if path == "/api/v1/radar/runs":
+                if self.radar_manager is None:
+                    self._json({"error": "radar_unavailable"}, HTTPStatus.SERVICE_UNAVAILABLE)
+                    return
+                length = _int(self.headers.get("Content-Length", "0"), 0)
+                payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+                try:
+                    state = self.radar_manager.start(payload)
+                except RadarBusyError as error:
+                    self._json({"error": str(error)}, HTTPStatus.CONFLICT)
+                    return
+                self._json(state, HTTPStatus.ACCEPTED)
+            elif path.startswith("/api/v1/review/tasks/") and path.endswith("/decision"):
                 task_id = path.removeprefix("/api/v1/review/tasks/").removesuffix("/decision").strip("/")
                 length = _int(self.headers.get("Content-Length", "0"), 0)
                 payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
@@ -638,10 +673,13 @@ def run_server(
 ) -> None:
     repository = create_repository(database_path, backend, neo4j_config)
     backend = repository.health().get("backend", "sqlite")
+    radar_manager = None
+    if neo4j_config is not None:
+        radar_manager = RadarRunManager(Path(__file__).resolve().parent.parent, neo4j_config)
     handler = type(
         "ConfiguredGraphRequestHandler",
         (GraphRequestHandler,),
-        {"repository": repository, "page_path": page_path},
+        {"repository": repository, "page_path": page_path, "radar_manager": radar_manager},
     )
     server = ThreadingHTTPServer((host, port), handler)
     print(f"可信岗位图谱 API 已启动：http://{host}:{port}")

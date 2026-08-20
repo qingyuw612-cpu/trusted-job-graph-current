@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>岗位能力图谱 · 统一前端</title>
+  <link rel="stylesheet" href="assets/ui.css">
+</head>
+<body>
+  <div class="app-shell" id="shell"></div>
+  <script src="assets/ui.js"></script>
+  <script>
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const PALETTE = ["#19a889", "#6f8cff", "#a66ee8", "#f0a14a", "#ef6f8e", "#39a9db", "#5fbd72"];
+    const localDemo = location.protocol === "file:" || ["127.0.0.1", "localhost"].includes(location.hostname);
+    const GRAPH_API_BASE = new URLSearchParams(location.search).get("graphApi")
+      || (localDemo ? "http://127.0.0.1:8010" : "");
+    let graphData = { nodes: [], edges: [] };
+    let view = { x: 0, y: 0, scale: 1 };
+    let dragging = false;
+    let dragPoint = null;
+    let selectedNodeId = "";
+
+    $("shell").innerHTML = navShell(
+      "panorama",
+      "岗位能力图谱",
+      "按岗位、技术栈、级别和时间窗口查看技能级关系，并追溯 JD 证据"
+    ) + `
+      <main id="mainContent" class="page graph-page">
+        <section class="panel graph-console">
+          <div class="toolbar">
+            <div class="wide">
+              <label for="role">中心岗位</label>
+              <select id="role"></select>
+            </div>
+            <div>
+              <label for="stack">技术栈</label>
+              <select id="stack"><option value="">全部技术栈</option></select>
+            </div>
+            <div>
+              <label for="level">岗位级别</label>
+              <select id="level"><option value="">全部级别</option></select>
+            </div>
+            <div>
+              <label for="window">数据季度</label>
+              <select id="window"><option value="">全量汇总</option></select>
+            </div>
+            <div>
+              <label for="limit">能力点数</label>
+              <select id="limit"><option>20</option><option selected>30</option><option>40</option><option>50</option></select>
+            </div>
+            <div>
+              <label for="support">最低 JD 覆盖率</label>
+              <div class="range-row">
+                <input id="support" type="range" min="0" max="0.8" step="0.05" value="0">
+                <span id="supportValue" class="range-value">0%</span>
+              </div>
+            </div>
+            <div class="actions right">
+              <button id="refresh" class="primary" type="button">生成视图</button>
+            </div>
+          </div>
+
+          <div class="split-panel graph-workspace">
+            <section class="panel graph-panel">
+              <div class="panel-head">
+                <div class="panel-title graph-heading">
+                  <h2 id="graphTitle">岗位能力星图</h2>
+                  <small>KNOWLEDGE GRAPH EXPLORER</small>
+                </div>
+                <div class="actions">
+                  <div class="graph-legend" aria-label="图例"><span><i class="role-key"></i>岗位</span><span><i class="category-key"></i>能力模块</span><span><i class="skill-key"></i>能力点</span></div>
+                  <button id="zoomOut" type="button" title="缩小">-</button>
+                  <span id="zoomValue" class="code">100%</span>
+                  <button id="zoomIn" type="button" title="放大">+</button>
+                  <button id="zoomReset" type="button">适配</button>
+                </div>
+              </div>
+              <div class="timeline-row">
+                <span class="field-label" style="margin:0">时间切片</span>
+                <div id="timelineButtons" class="actions"></div>
+              </div>
+              <div id="graphWrap" class="graph-canvas">
+                <svg id="graph" viewBox="-900 -620 1800 1240" preserveAspectRatio="xMidYMid meet" aria-label="岗位能力知识图谱">
+                  <g id="viewport"></g>
+                </svg>
+                <div class="graph-tip">滚轮缩放 · 拖动空白平移 · 点击能力卡片回溯 JD 证据</div>
+              </div>
+            </section>
+
+            <aside class="panel graph-inspector">
+              <section class="graph-summary">
+                <div class="eyebrow">CURRENT PERSPECTIVE</div>
+                <h2 id="summaryTitle">当前视图</h2>
+                <p id="summaryNote">等待图谱服务返回数据</p>
+                <div class="metric-grid">
+                  <div class="metric"><span>筛选后 JD</span><strong id="jdCount" class="num">0</strong></div>
+                  <div class="metric"><span>能力点</span><strong id="skillCount" class="num">0</strong></div>
+                  <div class="metric"><span>原文证据</span><strong id="evidenceCount" class="num">0</strong></div>
+                  <div class="metric"><span>能力模块</span><strong id="categoryCount" class="num">0</strong></div>
+                </div>
+              </section>
+
+              <section class="graph-detail">
+                <div class="graph-detail-head">
+                  <h2 id="detailTitle">节点检查器</h2>
+                  <p id="detailSubtitle">选择能力卡片，查看它来自哪些招聘原文</p>
+                </div>
+                <div id="detail" class="graph-detail-body">
+                  ${emptyState("图谱以岗位为中心，向外展开能力模块和能力点。")}
+                </div>
+              </section>
+            </aside>
+          </div>
+        </section>
+      </main>
+    ` + closeShell();
+
+    function svgEl(name) {
+      return document.createElementNS(SVG_NS, name);
+    }
+
+    async function init() {
+      try {
+        setStatus("pageStatus", "正在连接图谱服务", "warn");
+        const [health, facets, roles] = await Promise.all([
+          graphJSON("/api/health"),
+          graphJSON("/api/v1/facets"),
+          graphJSON("/api/v1/roles"),
+        ]);
+        const jds = health.counts?.jds || health.jds || 0;
+        setStatus("pageStatus", `图谱服务在线 · ${fmtNumber(jds)} 条 JD`, "ok");
+        $("stack").innerHTML = `<option value="">全部技术栈</option>${(facets.stacks || []).map((value) => `<option value="${esc(value)}">${esc(value)}</option>`).join("")}`;
+        $("level").innerHTML = `<option value="">全部级别</option>${(facets.levels || []).map((value) => {
+          const label = value.level_name || value;
+          return `<option value="${esc(label)}">${esc(label)}</option>`;
+        }).join("")}`;
+        $("role").innerHTML = (roles || []).map((role) => {
+          const selected = role.role_name === "产品经理" ? "selected" : "";
+          const prefix = role.family_name ? `${role.family_name}｜` : "";
+          return `<option value="${esc(role.role_id)}" ${selected}>${esc(prefix + role.role_name)}</option>`;
+        }).join("");
+        $("support").oninput = () => {
+          $("supportValue").textContent = fmtPercent(Number($("support").value), 0);
+        };
+        ["stack", "level", "window", "limit"].forEach((id) => $(id).onchange = loadGraph);
+        $("role").onchange = () => {
+          $("window").value = "";
+          loadGraph();
+        };
+        $("refresh").onclick = loadGraph;
+        setupZoom();
+        await loadGraph();
+      } catch (error) {
+        showGraphSetupError(error);
+      }
+    }
+
+    async function loadGraph() {
+      try {
+        setStatus("pageStatus", "正在生成岗位视图", "warn");
+        const params = new URLSearchParams({
+          role_id: $("role").value,
+          stack: $("stack").value,
+          level: $("level").value,
+          time_window: $("window").value,
+          min_support: $("support").value,
+          skill_limit: $("limit").value,
+        });
+        graphData = await graphJSON(`/api/v1/graph/panorama?${params}`);
+        syncWindows(graphData.available_windows || []);
+        renderTimeline(graphData.available_windows || []);
+        selectedNodeId = "";
+        resetZoom();
+        renderGraph();
+        renderSummary();
+        selectInitialSkill();
+        setStatus("pageStatus", `当前视图 · ${fmtNumber(graphData.stats?.filtered_jds || 0)} 条 JD`, "ok");
+      } catch (error) {
+        showGraphSetupError(error);
+      }
+    }
+
+    function syncWindows(windows) {
+      const current = $("window").value;
+      $("window").innerHTML = `<option value="">全量汇总</option>${windows.map((value) => `<option value="${esc(value)}">${esc(value)}</option>`).join("")}`;
+      if (windows.includes(current)) $("window").value = current;
+    }
+
+    function renderTimeline(windows) {
+      $("timelineButtons").innerHTML = ["", ...windows].map((value) => (
+        `<button class="${$("window").value === value ? "active" : ""}" data-window="${esc(value)}" type="button">${value || "全量"}</button>`
+      )).join("");
+      $("timelineButtons").querySelectorAll("button").forEach((button) => {
+        button.onclick = () => {
+          $("window").value = button.dataset.window;
+          loadGraph();
+        };
+      });
+    }
+
+    function renderSummary() {
+      const root = graphData.nodes.find((node) => node.type === "role");
+      const filters = graphData.filters || {};
+      const parts = [filters.stack || "全部技术栈", filters.level || "全部级别", filters.effective_time_window || "全部时间"];
+      $("summaryTitle").textContent = root?.label || "岗位图谱";
+      $("summaryNote").textContent = parts.join(" / ");
+      $("jdCount").textContent = fmtNumber(graphData.stats?.filtered_jds || 0);
+      $("skillCount").textContent = fmtNumber(graphData.nodes.filter((node) => node.type === "skill").length);
+      $("evidenceCount").textContent = fmtNumber(evidenceTotal());
+      $("categoryCount").textContent = fmtNumber(graphData.nodes.filter((node) => node.type === "category").length);
+      $("graphTitle").textContent = root ? `${root.label} · 能力图谱` : "岗位能力图谱";
+    }
+
+    function evidenceTotal() {
+      return Number(graphData.stats?.evidence ?? graphData.stats?.evidence_count ?? 0);
+    }
+
+    function splitLabel(text, maxUnits = 16) {
+      const chars = [...String(text || "")];
+      const lines = [""];
+      let units = 0;
+      for (const char of chars) {
+        const size = /[^\x00-\xff]/.test(char) ? 1.7 : 1;
+        if (units + size > maxUnits && lines[lines.length - 1]) {
+          lines.push("");
+          units = 0;
+        }
+        lines[lines.length - 1] += char;
+        units += size;
+      }
+      return lines.slice(0, 2);
+    }
+
+    function nodeBox(node) {
+      if (node.type === "role") return { w: 240, h: 94, rx: 24 };
+      if (node.type === "category") return { w: 184, h: 74, rx: 19 };
+      const lines = splitLabel(node.label);
+      return { w: Math.max(148, Math.min(214, visualLength(node.label) * 8 + 40)), h: lines.length > 1 ? 68 : 54, rx: 14 };
+    }
+
+    function visualLength(text) {
+      return [...String(text || "")].reduce((sum, char) => sum + (/[^\x00-\xff]/.test(char) ? 1.7 : 1), 0);
+    }
+
+    function buildLayout(root, categories, skills) {
+      const positions = new Map();
+      if (!root) return positions;
+      positions.set(root.id, { x: 0, y: 0, depth: 0, color: "#f26f3d", ...nodeBox(root) });
+      const count = Math.max(categories.length, 1);
+      const categoryRadius = count <= 3 ? 235 : 260;
+      const sector = 2 * Math.PI / count;
+      const usableSpan = Math.min(1.14, sector * 0.86);
+      categories.forEach((category, index) => {
+        const angle = -Math.PI / 2 + sector * index;
+        const color = PALETTE[index % PALETTE.length];
+        positions.set(category.id, { x: Math.cos(angle) * categoryRadius, y: Math.sin(angle) * categoryRadius, depth: 1, color, ...nodeBox(category) });
+        const categorySkills = skills.filter((skill) => skill.category === category.label);
+        let cursor = 0;
+        let ring = 0;
+        while (cursor < categorySkills.length) {
+          const radius = 360 + ring * 110;
+          const capacity = Math.max(3, Math.floor(radius * usableSpan / 174) + 1);
+          const items = categorySkills.slice(cursor, cursor + capacity);
+          const spread = items.length === 1 ? 0 : Math.min(usableSpan, (items.length - 1) * 174 / radius);
+          items.forEach((skill, slot) => {
+            const skillAngle = items.length === 1 ? angle : angle - spread / 2 + spread * slot / (items.length - 1);
+            positions.set(skill.id, {
+              x: Math.cos(skillAngle) * radius,
+              y: Math.sin(skillAngle) * radius,
+              depth: 2,
+              color,
+              ...nodeBox(skill),
+            });
+          });
+          cursor += capacity;
+          ring += 1;
+        }
+      });
+      return positions;
+    }
+
+    function renderGraph() {
+      const viewport = $("viewport");
+      viewport.innerHTML = "";
+      const root = graphData.nodes.find((node) => node.type === "role");
+      const categories = graphData.nodes.filter((node) => node.type === "category");
+      const skills = graphData.nodes.filter((node) => node.type === "skill");
+      const positions = buildLayout(root, categories, skills);
+      if (!root) {
+        viewport.innerHTML = `<text x="0" y="0" class="empty-text">当前条件下暂无图谱数据</text>`;
+        return;
+      }
+      const categoryColors = new Map(categories.map((category) => [category.label, positions.get(category.id)?.color || PALETTE[0]]));
+      graphData.edges.forEach((edge) => {
+        const from = positions.get(edge.source);
+        const to = positions.get(edge.target);
+        if (!from || !to) return;
+        const path = svgEl("path");
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const bend = edge.target.startsWith("skill:") ? 0.035 : 0.06;
+        const cx = (from.x + to.x) / 2 - dy * bend;
+        const cy = (from.y + to.y) / 2 + dx * bend;
+        const target = graphData.nodes.find((node) => node.id === edge.target);
+        path.setAttribute("class", `graph-edge ${edge.target.startsWith("skill:") ? "skill-edge" : "category-edge"}`);
+        path.style.stroke = target?.type === "skill" ? (categoryColors.get(target.category) || PALETTE[0]) : (to.color || "#7089aa");
+        path.setAttribute("d", `M${from.x},${from.y} Q${cx},${cy} ${to.x},${to.y}`);
+        viewport.appendChild(path);
+      });
+      [...skills, ...categories, root].forEach((node) => drawNode(viewport, node, positions.get(node.id), skills));
+      fitGraph(positions);
+    }
+
+    function selectInitialSkill() {
+      const skills = graphData.nodes.filter((node) => node.type === "skill");
+      if (!skills.length) {
+        $("detailTitle").textContent = "证据追溯";
+        $("detailSubtitle").textContent = "当前筛选没有能力点";
+        $("detail").innerHTML = emptyState("当前筛选条件下暂无能力点。请切换岗位、季度或降低最低 JD 覆盖率。");
+        return;
+      }
+      const skill = [...skills].sort((a, b) => (Number(b.evidence_count) || 0) - (Number(a.evidence_count) || 0))[0];
+      selectedNodeId = skill.id;
+      document.querySelectorAll(".graph-node").forEach((item) => item.classList.toggle("selected", item.dataset.nodeId === skill.id));
+      selectNode(skill);
+    }
+
+    function drawNode(viewport, node, position, skills) {
+      if (!node || !position) return;
+      const group = svgEl("g");
+      group.setAttribute("class", `graph-node graph-star-node ${selectedNodeId === node.id ? "selected" : ""}`);
+      group.dataset.nodeId = node.id;
+      group.setAttribute("transform", `translate(${position.x} ${position.y})`);
+      group.style.setProperty("--node-color", position.color);
+      const halo = svgEl("rect");
+      halo.setAttribute("class", "node-halo");
+      halo.setAttribute("x", -position.w / 2 - 5);
+      halo.setAttribute("y", -position.h / 2 - 5);
+      halo.setAttribute("width", position.w + 10);
+      halo.setAttribute("height", position.h + 10);
+      halo.setAttribute("rx", position.rx + 5);
+      halo.setAttribute("fill", position.color);
+      group.appendChild(halo);
+      const shape = svgEl("rect");
+      shape.setAttribute("class", "node-shape");
+      shape.setAttribute("x", -position.w / 2);
+      shape.setAttribute("y", -position.h / 2);
+      shape.setAttribute("width", position.w);
+      shape.setAttribute("height", position.h);
+      shape.setAttribute("rx", position.rx);
+      shape.setAttribute("fill", node.type === "role" ? "#fff7f2" : node.type === "category" ? position.color : "#ffffff");
+      shape.setAttribute("fill-opacity", node.type === "category" ? "0.13" : "0.98");
+      shape.setAttribute("stroke", position.color);
+      shape.setAttribute("stroke-width", node.type === "role" ? 2.4 : node.type === "category" ? 2 : 1.7);
+      group.appendChild(shape);
+      if (node.type === "skill") {
+        const signal = svgEl("circle");
+        signal.setAttribute("class", "node-signal");
+        signal.setAttribute("cx", -position.w / 2 + 16);
+        signal.setAttribute("cy", "0");
+        signal.setAttribute("r", "3.5");
+        signal.setAttribute("fill", position.color);
+        group.appendChild(signal);
+      }
+      const label = svgEl("text");
+      splitLabel(node.label, node.type === "role" ? 20 : 15).forEach((line, index, lines) => {
+        const tspan = svgEl("tspan");
+        tspan.setAttribute("x", node.type === "skill" ? "5" : "0");
+        const offset = node.type === "skill" ? 0 : -6;
+        tspan.setAttribute("y", offset + (index - (lines.length - 1) / 2) * 19);
+        tspan.textContent = line;
+        label.appendChild(tspan);
+      });
+      group.appendChild(label);
+      if (node.type !== "skill") {
+        const sub = svgEl("text");
+        sub.setAttribute("class", "node-subtitle");
+        sub.setAttribute("y", node.type === "role" ? 22 : 18);
+        sub.textContent = node.type === "role" ? "CENTRAL ROLE" : `${skills.filter((skill) => skill.category === node.label).length} ABILITIES`;
+        group.appendChild(sub);
+      }
+      const title = svgEl("title");
+      title.textContent = node.type === "skill" ? `${node.label} · 点击查看 JD 证据` : node.label;
+      group.appendChild(title);
+      group.onclick = (event) => {
+        event.stopPropagation();
+        selectedNodeId = node.id;
+        document.querySelectorAll(".graph-node").forEach((item) => item.classList.toggle("selected", item.dataset.nodeId === node.id));
+        selectNode(node);
+      };
+      viewport.appendChild(group);
+    }
+
+    function fitGraph(positions) {
+      const values = [...positions.values()];
+      if (!values.length) return;
+      const minX = Math.min(...values.map((p) => p.x - p.w / 2));
+      const maxX = Math.max(...values.map((p) => p.x + p.w / 2));
+      const minY = Math.min(...values.map((p) => p.y - p.h / 2));
+      const maxY = Math.max(...values.map((p) => p.y + p.h / 2));
+      let width = Math.max(1180, maxX - minX + 180);
+      let height = Math.max(780, maxY - minY + 160);
+      const wrap = $("graphWrap");
+      const aspect = Math.max(1, wrap.clientWidth / Math.max(wrap.clientHeight, 1));
+      if (width / height < aspect) width = height * aspect;
+      if (width / height > aspect) height = width / aspect;
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      $("graph").setAttribute("viewBox", `${centerX - width / 2} ${centerY - height / 2} ${width} ${height}`);
+    }
+
+    function selectNode(node) {
+      $("detailTitle").textContent = node.label;
+      $("detailSubtitle").textContent = node.type === "skill" ? "JD 原文证据与回标状态" : "节点说明";
+      if (node.type === "skill") {
+        loadEvidence(node);
+        return;
+      }
+      if (node.type === "category") {
+        const count = graphData.nodes.filter((item) => item.type === "skill" && item.category === node.label).length;
+        $("detail").innerHTML = `<div class="notice">该能力模块包含 <b class="num">${fmtNumber(count)}</b> 个能力点。选择外围能力点即可查看对应 JD 证据。</div>`;
+        return;
+      }
+      $("detail").innerHTML = `<div class="notice">当前中心岗位为 <b>${esc(node.label)}</b>。可使用上方筛选条件切换技术栈、级别和季度。</div>`;
+    }
+
+    async function loadEvidence(node) {
+      $("detail").innerHTML = emptyState("正在读取当前视图对应的 JD 原文...");
+      try {
+        const params = new URLSearchParams({
+          role_id: node.role_id,
+          time_window: node.time_window || "",
+          level: $("level").value,
+          stack: $("stack").value,
+          limit: "30",
+        });
+        const data = await graphJSON(`/api/v1/skills/${encodeURIComponent(node.entity_id)}/evidence?${params}`);
+        if (!data.evidence || !data.evidence.length) {
+          const summaryEvidence = Number(node.evidence_count || 0);
+          $("detail").innerHTML = `
+            <div class="detail-stack">
+              <div class="notice">
+                当前能力在图谱汇总层有 <b class="num">${fmtNumber(summaryEvidence)}</b> 条回标计数，说明 Neo4j 图谱数据已经连上。
+              </div>
+              <div class="notice" style="border-color:#fde68a;background:var(--warning-weak);color:#78350f">
+                但当前导入的是展示图谱包，只包含岗位、能力、快照和汇总关系；Neo4j 里没有原始 JD、公司和能力回标明细节点，所以接口无法返回右侧这种“已回标验证”的原文卡片。
+              </div>
+              <div class="notice">
+                要恢复截图里的证据卡，需要导入完整处理后的 Neo4j 数据库，或者让图谱负责人重新导出包含
+                <span class="code">RawJDVersion</span>、<span class="code">ProcessedJD</span>、<span class="code">AbilityCandidate</span>
+                和 <span class="code">HAS_ABILITY</span> 明细关系的数据包。
+              </div>
+            </div>
+          `;
+          return;
+        }
+        $("detail").innerHTML = data.evidence.map((item, index) => {
+          const status = item.evidence_status === "VERIFIED" ? "已回标验证" : item.evidence_status === "LOW_CONFIDENCE" ? "模糊回标" : "能力分析提取";
+          return `
+            <article class="panel" style="box-shadow:none;margin-bottom:10px">
+              <div class="panel-head" style="min-height:auto">
+                <div class="panel-title">
+                  <h3 class="truncate" title="${esc(item.title)}">${esc(item.title)}</h3>
+                  <small>${esc(item.company_name || "公司未公开")} · ${esc(item.level_name || "级别未注明")} · ${esc(item.time_window || "时间未注明")}</small>
+                </div>
+                <span class="tag ok">${esc(status)}</span>
+              </div>
+              <div class="panel-body">
+                <div class="notice">${esc(item.evidence_quote || "暂无证据片段")}</div>
+                <div class="actions right" style="margin-top:10px">
+                  <button type="button" onclick="toggleJD(${index})">查看完整 JD</button>
+                </div>
+                <div id="jd-${index}" class="markdown-box" style="display:none;margin-top:10px;max-height:220px;overflow:auto">${esc(item.description || item.tags || "")}</div>
+              </div>
+            </article>
+          `;
+        }).join("");
+      } catch (error) {
+        $("detail").innerHTML = `<div class="notice" style="border-color:#fecaca;background:var(--danger-weak);color:var(--danger)">${esc(error.message)}</div>`;
+      }
+    }
+
+    function toggleJD(index) {
+      const box = $("jd-" + index);
+      if (box) box.style.display = box.style.display === "block" ? "none" : "block";
+    }
+
+    function graphJSON(path) {
+      return getJSON(`${GRAPH_API_BASE}${path}`);
+    }
+
+    function setupZoom() {
+      const svg = $("graph");
+      $("zoomIn").onclick = () => zoomBy(1.18);
+      $("zoomOut").onclick = () => zoomBy(0.85);
+      $("zoomReset").onclick = resetZoom;
+      svg.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        zoomBy(event.deltaY < 0 ? 1.08 : 0.92);
+      }, { passive: false });
+      svg.addEventListener("pointerdown", (event) => {
+        if (event.target.closest(".graph-node")) return;
+        dragging = true;
+        dragPoint = { x: event.clientX, y: event.clientY };
+        svg.setPointerCapture(event.pointerId);
+      });
+      svg.addEventListener("pointermove", (event) => {
+        if (!dragging || !dragPoint) return;
+        const viewBox = svg.viewBox.baseVal;
+        const factor = viewBox.width / Math.max(svg.clientWidth, 1) / view.scale;
+        view.x += (event.clientX - dragPoint.x) * factor;
+        view.y += (event.clientY - dragPoint.y) * factor;
+        dragPoint = { x: event.clientX, y: event.clientY };
+        applyView();
+      });
+      const stop = () => {
+        dragging = false;
+        dragPoint = null;
+      };
+      svg.addEventListener("pointerup", stop);
+      svg.addEventListener("pointerleave", stop);
+      svg.addEventListener("click", (event) => {
+        if (event.target === svg) {
+          selectedNodeId = "";
+          document.querySelectorAll(".graph-node").forEach((item) => item.classList.remove("selected"));
+        }
+      });
+    }
+
+    function zoomBy(factor) {
+      view.scale = Math.max(0.48, Math.min(3.2, view.scale * factor));
+      applyView();
+    }
+
+    function resetZoom() {
+      view = { x: 0, y: 0, scale: 1 };
+      applyView();
+    }
+
+    function applyView() {
+      $("viewport").setAttribute("transform", `translate(${view.x} ${view.y}) scale(${view.scale})`);
+      $("zoomValue").textContent = fmtPercent(view.scale, 0);
+    }
+
+    function showError(error) {
+      setStatus("pageStatus", error.message, "error");
+      $("detail").innerHTML = `<div class="notice" style="border-color:#fecaca;background:var(--danger-weak);color:var(--danger)">${esc(error.message)}</div>`;
+    }
+
+    function showGraphSetupError(error) {
+      setStatus("pageStatus", "图谱服务未连接", "error");
+      $("role").innerHTML = `<option>请先启动 8010 图谱服务</option>`;
+      $("stack").innerHTML = `<option>全部技术栈</option>`;
+      $("level").innerHTML = `<option>全部级别</option>`;
+      $("window").innerHTML = `<option>全量汇总</option>`;
+      $("timelineButtons").innerHTML = "";
+      $("viewport").innerHTML = "";
+      $("graphTitle").textContent = "岗位能力图谱";
+      $("summaryTitle").textContent = "Neo4j 未连接";
+      $("summaryNote").textContent = "请先完成展示包导入并启动图谱 API";
+      $("jdCount").textContent = "0";
+      $("skillCount").textContent = "0";
+      $("evidenceCount").textContent = "0";
+      $("categoryCount").textContent = "0";
+      $("detailTitle").textContent = "联调步骤";
+      $("detailSubtitle").textContent = "这不是前端空白，而是后端图谱服务未就绪";
+      $("detail").innerHTML = `
+        <div class="detail-stack">
+          <div class="notice" style="border-color:#fecaca;background:var(--danger-weak);color:var(--danger)">
+            ${esc(error.message || "无法连接 http://127.0.0.1:8010/api/health")}
+          </div>
+          <div class="notice">
+            <b>1. 启动 Neo4j</b><br>
+            在 Neo4j Desktop 中启动本地数据库，确认 Bolt 地址是 <span class="code">bolt://127.0.0.1:7687</span>。
+          </div>
+          <div class="notice">
+            <b>2. 配置连接文件</b><br>
+            复制 <span class="code">trusted-job-graph-main/config/neo4j_connection.example.json</span>
+            为 <span class="code">neo4j_connection.json</span>，填入你的 Neo4j 密码。
+          </div>
+          <div class="notice">
+            <b>3. 导入展示包</b>
+            <div class="markdown-box" style="margin-top:8px">cd C:\\Users\\Mully.Min\\Desktop\\xiaotiao\\trusted-job-graph-main
+python display_graph_handoff.py import --package "C:\\Users\\Mully.Min\\Desktop\\xiaotiao\\display_graph.json" --neo4j-config config\\neo4j_connection.json</div>
+          </div>
+          <div class="notice">
+            <b>4. 启动图谱 API</b>
+            <div class="markdown-box" style="margin-top:8px">python display_graph_handoff.py serve --neo4j-config config\\neo4j_connection.json</div>
+          </div>
+        </div>
+      `;
+    }
+
+    init();
+  </script>
+</body>
+</html>
