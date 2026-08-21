@@ -4,13 +4,13 @@ import os
 from typing import Any, Dict, List, Optional
 
 from ..core.ranking import rank_roles, compute_dimension_hits
-from ..store import RoleStore, create_store
+from ..store import RoleStore, get_shared_store
 
 
 def _get_store() -> RoleStore:
-    """按 STORE_BACKEND 环境变量选择数据源，默认 memory。"""
+    """按 STORE_BACKEND 选择进程级共享数据源，默认 memory。"""
     backend = os.getenv("STORE_BACKEND", "memory")
-    return create_store(backend)
+    return get_shared_store(backend)
 
 
 def rank_resume(
@@ -56,6 +56,9 @@ def rank_resume(
     if not roles:
         raise RuntimeError("Role 数据为空，请检查 STORE_BACKEND 配置。")
 
+    roles_by_name = {
+        str(role.get("role_name") or ""): role for role in roles
+    }
     ranked = rank_roles(
         text,
         roles,
@@ -64,7 +67,7 @@ def rank_resume(
     )
     results: List[Dict[str, Any]] = []
     for item in ranked:
-        role = store.get_role_by_name(item["role_name"]) or {}
+        role = roles_by_name.get(item["role_name"], {})
         skills = [s for s in role.get("skills", []) if s.get("name")]
         results.append(
             {
@@ -88,4 +91,3 @@ def rank_resume(
         "count": len(ranked),
         "results": results,
     }
-

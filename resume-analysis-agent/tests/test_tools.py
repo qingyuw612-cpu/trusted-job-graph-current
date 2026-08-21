@@ -55,6 +55,27 @@ class TestRankResume:
         with pytest.raises(ValueError):
             rank_resume("   ", store=memory_store)
 
+    def test_reuses_loaded_roles_for_topk_details(self):
+        class CountingStore(MemoryRoleStore):
+            def __init__(self):
+                self.load_count = 0
+                self.lookup_count = 0
+
+            def get_all_roles(self):
+                self.load_count += 1
+                return super().get_all_roles()
+
+            def get_role_by_name(self, name):
+                self.lookup_count += 1
+                return super().get_role_by_name(name)
+
+        store = CountingStore()
+        result = rank_resume("Python", topk=5, store=store)
+
+        assert result["results"]
+        assert store.load_count == 1
+        assert store.lookup_count == 0
+
 
 class TestEnhanceMatches:
     def test_with_injected_llm(self, memory_store):
@@ -435,4 +456,3 @@ class TestRenderRadar:
         assert os.path.isfile(path)
         with open(path, "rb") as f:
             assert f.read(8) == b"\x89PNG\r\n\x1a\n"
-

@@ -30,7 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, SecretStr
 
-from src.store import create_store
+from src.store import get_shared_store
 from src.tools.analyze import analyze_gap
 from src.tools.enhance import enhance_matches
 from src.tools.modify import suggest_resume_edit, validate_resume_edit
@@ -182,7 +182,7 @@ def health() -> HealthResponse:
     """返回服务状态、当前数据源后端、可匹配岗位数与 LLM 配置情况。"""
     backend = os.getenv("STORE_BACKEND", "memory")
     try:
-        store = create_store(backend)
+        store = get_shared_store(backend)
         roles = store.get_all_roles()
         roles_available = len(roles)
     except Exception:
