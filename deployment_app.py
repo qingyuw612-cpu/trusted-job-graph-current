@@ -19,7 +19,13 @@ from urllib.parse import parse_qs, unquote, urlparse
 ROOT = Path(__file__).resolve().parent
 DATA_PATH = ROOT / "demo_data" / "review_demo.json"
 PANORAMA_PAGE = ROOT / "trusted_graph_agent" / "static" / "panorama.html"
-NEW_ROLES_PAGE = ROOT / "new_role_discovery" / "static" / "index.html"
+_LEGACY_NEW_ROLES_PAGE = ROOT / "new_role_discovery" / "static" / "index.html"
+_CURRENT_NEW_ROLES_PAGE = ROOT / "qianduan" / "html-main2" / "emerging-roles.html"
+NEW_ROLES_PAGE = (
+    _LEGACY_NEW_ROLES_PAGE
+    if _LEGACY_NEW_ROLES_PAGE.is_file()
+    else _CURRENT_NEW_ROLES_PAGE
+)
 ABILITY_CHANGES_PAGE = ROOT / "new_role_discovery" / "static" / "ability_changes.html"
 
 

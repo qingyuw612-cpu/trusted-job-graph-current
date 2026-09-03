@@ -17,10 +17,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 GRAPH_DIR = ROOT
 RESUME_DIR = ROOT / "resume-analysis-agent"
+# Code always comes from the integrated repository. A sibling virtualenv may
+# still provide the interpreter locally, but must never select sibling code.
+sibling_resume_dir = ROOT.parent / "resume-analysis-agent"
 FRONTEND_DIR = ROOT / "qianduan" / "html-main2"
 RESUME_PYTHON = RESUME_DIR / ".venv" / "Scripts" / "python.exe"
+if not RESUME_PYTHON.is_file():
+    sibling_resume_python = sibling_resume_dir / ".venv" / "Scripts" / "python.exe"
+    if sibling_resume_python.is_file():
+        RESUME_PYTHON = sibling_resume_python
 DEFAULT_GRAPH_CONFIG = GRAPH_DIR / "config" / "neo4j_connection.json"
-SERVICE_PORTS = {8000: "简历分析 API", 8010: "岗位图谱 API", 8090: "统一前端"}
+SERVICE_PORTS = {
+    8000: "简历分析 API",
+    8010: "岗位图谱 API",
+    8070: "岗位演化审核 API",
+    8090: "统一前端",
+}
 
 
 def check_url(name: str, url: str, timeout: float = 1.5) -> bool:
@@ -59,12 +71,18 @@ def validate_layout() -> bool:
         FRONTEND_DIR / "resume-match.html",
     ]
     ok = True
+    def display_path(path: Path) -> str:
+        try:
+            return str(path.relative_to(ROOT))
+        except ValueError:
+            return str(path)
+
     for path in required:
         exists = path.is_file()
-        print(f"[{'OK' if exists else '!!'}] {path.relative_to(ROOT)}")
+        print(f"[{'OK' if exists else '!!'}] {display_path(path)}")
         ok = ok and exists
     python_ok = RESUME_PYTHON.is_file()
-    print(f"[{'OK' if python_ok else '!!'}] {RESUME_PYTHON.relative_to(ROOT)}")
+    print(f"[{'OK' if python_ok else '!!'}] {display_path(RESUME_PYTHON)}")
     return ok and python_ok
 
 
@@ -73,6 +91,7 @@ def service_check() -> bool:
     print()
     statuses = [
         check_url("岗位图谱 API", "http://127.0.0.1:8010/api/health"),
+        check_url("岗位演化审核 API", "http://127.0.0.1:8070/api/v1/evolution/health"),
         check_url("简历分析 API", "http://127.0.0.1:8000/health"),
         check_url("统一前端", "http://127.0.0.1:8090/index.html"),
     ]
@@ -150,7 +169,9 @@ def main() -> int:
                                 os.environ.get("COMSPEC", "cmd.exe"),
                                 "/d",
                                 "/c",
-                                f'"{neo4j_command}" console',
+                                "call",
+                                str(neo4j_command),
+                                "console",
                             ],
                             instance_dir,
                             env=neo4j_env,
@@ -203,6 +224,23 @@ def main() -> int:
                         "serve",
                         "--neo4j-config",
                         str(config),
+                    ],
+                    GRAPH_DIR,
+                )
+            )
+            processes.append(
+                spawn(
+                    "岗位演化审核 API",
+                    [
+                        python,
+                        "-m",
+                        "new_role_discovery.app",
+                        "--neo4j-config",
+                        str(config),
+                        "--data-root",
+                        str(GRAPH_DIR / "output" / "role_evolution_workbench_v2"),
+                        "--port",
+                        "8070",
                     ],
                     GRAPH_DIR,
                 )

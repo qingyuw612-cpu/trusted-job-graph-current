@@ -1,5 +1,12 @@
 # Docker 部署与评审说明
 
+> 动态生产展示图谱的离线计算、版本化发布、线上分批切换和恢复流程见
+> [`DYNAMIC_DISPLAY_RELEASE.md`](DYNAMIC_DISPLAY_RELEASE.md)。
+
+> 真实 Neo4j + 三 API + 统一前端的正式上线请使用
+> [`deploy/DEPLOY_SYSTEMD.md`](deploy/DEPLOY_SYSTEMD.md) 及其 systemd/Nginx 安装器；
+> 本文下面的 Compose 流程仍用于脱敏评审或容器化演示。
+
 ## 一键评审（推荐）
 
 仓库默认路径不依赖 Neo4j、模型权重、外部 API 或私有招聘数据。它使用

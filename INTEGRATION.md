@@ -6,6 +6,8 @@
 - `resume-analysis-agent/`：简历解析、七维人岗匹配与差距分析 API，端口 `8000`
 - `qianduan/html-main2/`：统一前端，端口 `8090`
 
+版本边界：本目录是当前主版本；本地完整 Neo4j 由 `config/neo4j_connection.json` 指向，展示部署版由 `display_graph_handoff.py export` 单独生成。详细目录约定见 [LOCAL_VERSION_MAP.md](LOCAL_VERSION_MAP.md)。
+
 前端的 `panorama.html` 调用岗位图谱 API，`resume-match.html` 调用简历分析 API；首页同时检查两项服务。首页“新岗位动态雷达”会调用图谱 API，在后台依次执行限量采集、增量入图、活动图谱发布和新岗位发现。简历页传入的模型密钥只用于当前 HTTP 请求，不会写入 `.env` 或磁盘。
 
 ## 首次配置
@@ -36,6 +38,13 @@ Copy-Item config\neo4j_connection.example.json config\neo4j_connection.json
 .\resume-analysis-agent\.venv\Scripts\python.exe start_demo.py
 ```
 
+也可以使用明确的本地完整库入口：
+
+```powershell
+.\scripts\check_local_full.ps1
+.\scripts\start_local_full.ps1
+```
+
 打开 `http://127.0.0.1:8090/index.html`。只检查目录和服务状态：
 
 ```powershell
@@ -47,7 +56,12 @@ Copy-Item config\neo4j_connection.example.json config\neo4j_connection.json
 
 ### 首页动态雷达
 
-首页默认采用“全量关键词池”：统一读取 `config/job_radar_keywords.json` 中维护的 73 个岗位关键词，覆盖北上广深，并支持三平台联合巡检。也可以选择 12 个代表岗位的快速抽样，或从关键词池选择一个岗位定向检查。每次只允许一个任务运行，本轮总 JD 上限为 `20–2000` 条；三平台联合时会把上限均分到各平台，达到目标后停止继续遍历关键词，并只把本轮新增数据的受限 CSV 快照送进入图流程。
+首页监测入口只有两种方式：
+
+- **查看已有图谱**：直接读取本地 Neo4j 中已经处理好的岗位、技能和趋势数据，不重新采集。
+- **在线测试（200 条 JD）**：使用智联招聘单一岗位方向，最多采集 200 条 IT JD，调用讯飞 Spark Lite 生成一轮测试结果；测试不会切换正式归一化图谱。
+
+每次只允许一个任务运行。在线测试会写入本地审计/运行产物，正式展示图谱仍以已有活动版本为准。
 
 前端会轮询以下接口并显示真实阶段进度：
 
@@ -57,6 +71,12 @@ Copy-Item config\neo4j_connection.example.json config\neo4j_connection.json
 - `GET http://127.0.0.1:8010/api/v1/radar/results/latest`
 
 雷达接入沿用保护式流水线，只有采集、处理和校验全部成功才发布活动图谱；发布成功后自动运行新岗位与旧岗位能力变化发现，“新岗位发现”页会优先读取这份最新结果，没有完成过任务时才保留前端预览候选。能力抽取需要在启动统一服务的同一终端中配置讯飞环境变量：
+
+新岗位发现沿用既有的全量时间窗口流程：默认至少 3 条 JD、3 家企业、3 个模板、3 项能力和2项共享能力，并要求连续月份或独立来源证据达到原机械门槛。职责原文继续作为 AI 与人工审核材料，但不再作为机械候选准入条件。`REVIEW` 与 `WATCH` 都可进入人工查看，区别用于提示证据强弱。来源分布漂移仍作为质量警告，不会把平台差异直接当成岗位涌现。
+
+新岗位页面只使用 `8090/emerging-roles.html`；访问岗位演化 API 的 `/new-roles` 会跳转到该融合页面。Spark Lite 只是前 K 个候选的分析参与者，提供分类、标准名和岗位边界草稿；AI 缺失、部分完成、认为是别名或摘要措辞不理想，都不会隐藏或淘汰规则候选。人工审核通过 `8070/api/v1/evolution/.../review` 写入 Neo4j 独立版本子图，只有人工决定才改变候选状态；存储不可用时前端会停用按钮。
+
+定时任务与岗位演化服务统一读取 `EVOLUTION_DATA_ROOT`。生产环境均指向 `/var/lib/talentgraph/evolution`，因此定时任务完成后，新岗位页面和演化 API 会严格读取同一份最新全量任务；最新结果为 0 时直接展示 0，不回退到旧任务。
 
 ```powershell
 $env:IFLYTEK_SPARK_API_PASSWORD = "控制台中的 APIPassword"
@@ -73,11 +93,8 @@ $env:IFLYTEK_SPARK_MODEL = "对应的模型 ID"
   --neo4j-config "D:\path\to\neo4j_connection.json"
 ```
 
-## 可配置 API 地址
+## API 地址策略
 
-默认使用 `8000` 与 `8010`。部署或联调其他地址时可通过查询参数覆盖：
-
-```text
-http://127.0.0.1:8090/resume-match.html?resumeApi=http://server:8000
-http://127.0.0.1:8090/panorama.html?graphApi=http://server:8010
-```
+当前版本固定为单一链路，不支持通过 URL 查询参数覆盖 API：本地页面固定访问
+`127.0.0.1:8000`、`127.0.0.1:8010`、`127.0.0.1:8070`；生产页面使用同源
+`/api/v1/resume`、`/api`、`/api/v1/evolution`，由现有反向代理转发。

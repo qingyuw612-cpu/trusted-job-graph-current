@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="talentgraph-release" content="closed-loop-2026.08">
+    <title>知途 talentgraph · 工作台</title>
+  <link rel="stylesheet" href="assets/ui.css?v=closed-loop-20260831-radar-status1">
+</head>
+<body>
+  <div class="app-shell" id="shell"></div>
+  <script src="assets/ui.js?v=closed-loop-20260901-brand1"></script>
+  <script>
+    $("shell").innerHTML = navShell(
+      "index",
+      "知途 · 工作台",
+      "从岗位变化到个人能力，找到下一步该做什么。"
+    ) + `
+      <main id="mainContent" class="page page-grid">
+        <section class="card radar-status-card" aria-labelledby="radarStatusTitle">
+          <div class="radar-visual" id="radarVisual" aria-hidden="true">
+            <span class="radar-ring ring-1"></span>
+            <span class="radar-ring ring-2"></span>
+            <span class="radar-ring ring-3"></span>
+            <span class="radar-cross horizontal"></span>
+            <span class="radar-cross vertical"></span>
+            <span class="radar-sweep"></span>
+            <i class="radar-blip blip-1"></i><i class="radar-blip blip-2"></i><i class="radar-blip blip-3"></i>
+          </div>
+          <div class="radar-status-content">
+            <h2 id="radarStatusTitle">岗位雷达持续检测中</h2>
+          </div>
+        </section>
+
+        <section class="launch-grid" aria-label="核心任务入口">
+          <article class="card task-card task-card-graph">
+            <div class="task-card-head">
+              <h2>岗位全景图谱</h2>
+              <span id="graphTaskTag" class="tag">检测中</span>
+            </div>
+            <p class="task-card-summary">查看岗位能力结构、需求趋势与招聘来源。</p>
+            <div class="evidence-chain" aria-hidden="true">
+              <span>选择目标岗位</span><i></i><span>查看能力结构</span><i></i><span>核对招聘依据</span>
+            </div>
+            <div class="actions right">
+              <a class="button primary" href="panorama.html">查看岗位图谱 →</a>
+            </div>
+          </article>
+
+          <article class="card task-card task-card-resume">
+            <div class="task-card-head">
+              <h2>人岗差距分析</h2>
+              <span id="resumeTaskTag" class="tag">检测中</span>
+            </div>
+            <p class="task-card-summary">上传简历，获得岗位排序与能力补齐建议。</p>
+            <div class="evidence-chain gap-chain" aria-hidden="true">
+              <span>上传个人简历</span><i></i><span>获取岗位匹配</span><i></i><span>生成补齐建议</span>
+            </div>
+            <div class="actions right">
+              <a class="button primary" href="resume-match.html">开始简历匹配 →</a>
+            </div>
+          </article>
+
+          <article class="card task-card task-card-discovery">
+            <div class="task-card-head">
+              <h2>新岗位涌现</h2>
+              <span class="tag ok">可预览</span>
+            </div>
+            <p class="task-card-summary">识别正在形成的新角色及其市场依据。</p>
+            <div class="evidence-chain review-chain" aria-hidden="true">
+              <span>识别市场信号</span><i></i><span>分析候选岗位</span><i></i><span>完成人工确认</span>
+            </div>
+            <div class="actions right">
+              <a class="button primary" href="emerging-roles.html">查看新岗位 →</a>
+            </div>
+          </article>
+
+          <article class="card task-card task-card-evolution">
+            <div class="task-card-head">
+              <h2>旧岗位能力更新</h2>
+              <span class="tag ok">真实数据</span>
+            </div>
+            <p class="task-card-summary">追踪已有岗位的能力要求如何变化。</p>
+            <div class="evidence-chain" aria-hidden="true">
+              <span>对比基线能力</span><i></i><span>查看当前覆盖</span><i></i><span>核验变化证据</span>
+            </div>
+            <div class="actions right">
+              <a class="button primary" href="emerging-roles.html?view=updates">查看能力更新 →</a>
+            </div>
+          </article>
+        </section>
+      </main>
+    ` + closeShell();
+
+    const localDemo = location.protocol === "file:" || ["127.0.0.1", "localhost"].includes(location.hostname);
+    // Production is same-origin; local development keeps the fixed API ports.
+    // API routing is not selected through URL query parameters.
+    const graphBase = localDemo ? "http://127.0.0.1:8010" : "";
+    const resumeBase = localDemo ? "http://127.0.0.1:8000" : "/api/v1/resume";
+    async function checkServices() {
+      setStatus("pageStatus", "正在准备功能", "warn");
+      const graph = await ping(`${graphBase}/api/health`);
+      const resume = await ping(`${resumeBase}/health`);
+      writeTaskStatus("graph", graph);
+      writeTaskStatus("resume", resume);
+      const okCount = Number(graph.ok) + Number(resume.ok);
+      const setupNotice = $("setupNotice");
+      if (setupNotice) {
+        setupNotice.textContent = okCount
+          ? "功能已准备好，可以直接进入任一模块。"
+          : "页面可以正常浏览，数据更新功能暂时不可用。";
+      }
+      setStatus("pageStatus", okCount ? "功能已准备好" : "页面浏览就绪", "ok");
+    }
+
+    function writeTaskStatus(prefix, result) {
+      const tag = $(`${prefix}TaskTag`);
+      tag.textContent = result.ok ? "可以使用" : "稍后再试";
+      tag.className = result.ok ? "tag ok" : "tag medium";
+    }
+
+    async function ping(url) {
+      try {
+        const data = await getJSON(url);
+        const jds = data.counts?.jds ?? data.roles_available ?? data.status ?? "已响应";
+        return { ok: true, text: String(jds) };
+      } catch {
+        return { ok: false, text: "" };
+      }
+    }
+
+    checkServices();
+  </script>
+</body>
+</html>

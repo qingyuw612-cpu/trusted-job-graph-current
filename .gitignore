@@ -4,6 +4,7 @@
 # Repository metadata and setup
 !/.gitignore
 !/README.md
+!/SUBMISSION.md
 !/TEAM_HANDOFF.md
 !/requirements.txt
 !/requirements-normalization.txt
@@ -19,6 +20,14 @@
 !/DEPLOYMENT.md
 !/DEPLOY_ALIYUN.md
 !/CRAWLER_STANDALONE.md
+!/LOCAL_VERSION_MAP.md
+!/INTEGRATION.md
+
+# Explicit local-version operation helpers
+!/scripts/
+!/scripts/*.ps1
+!/scripts/backfill_normalized_skill_stacks.py
+!/scripts/reclassify_role_families.py
 
 # Top-level processing entry points
 !/*.py
@@ -110,3 +119,11 @@
 !/resume-analysis-agent/**
 !/qianduan/
 !/qianduan/**
+
+# Production systemd/Nginx deployment helpers (templates only; no secrets)
+!/deploy/
+!/deploy/*.sh
+!/deploy/*.md
+!/deploy/*.template
+!/deploy/*.example
+!/deploy/FINAL_FRONTEND_RELEASE.json
