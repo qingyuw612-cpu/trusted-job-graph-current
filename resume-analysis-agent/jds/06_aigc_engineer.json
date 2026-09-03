@@ -1,0 +1,35 @@
+{
+  "job_title": "AIGC应用开发工程师",
+  "source": "test_data",
+  "raw_text": "岗位职责：1、负责AIGC应用开发，包括文生文、文生图、Agent工作流等产品功能落地；2、负责大模型API接入、Prompt工程、RAG检索增强生成技术方案设计与实现；3、负责AI应用的后端服务开发（FastAPI等）与性能优化；4、跟踪前沿AIGC技术，评估新模型能力并推动业务创新。任职要求：1、计算机相关专业本科及以上学历；2、熟悉大模型API调用（OpenAI/DeepSeek等），掌握Prompt工程技巧；3、熟悉RAG架构，掌握向量数据库（Milvus/FAISS）与Embedding技术；4、掌握Python，熟悉FastAPI等Web框架，了解LangChain/LangGraph等Agent框架；5、具备良好的工程实现能力，有AI应用上线经验者优先；6、学习能力强、沟通能力好，具有创新意识和团队合作精神。",
+  "five_dim": {
+    "knowledge": [
+      "计算机相关专业",
+      "大模型API与Prompt工程认知",
+      "RAG检索增强生成原理",
+      "Agent框架（LangChain/LangGraph）认知"
+    ],
+    "skill": [
+      "大模型API接入与调用",
+      "Prompt工程",
+      "RAG实现（向量数据库、Embedding）",
+      "FastAPI后端开发",
+      "Python编程",
+      "AI应用上线经验"
+    ],
+    "motivation": [
+      "创新意识"
+    ],
+    "trait": [
+      "学习能力强",
+      "沟通能力好"
+    ],
+    "self_concept": [
+      "团队合作精神"
+    ],
+    "qualifications": [
+      "计算机相关专业",
+      "本科及以上学历"
+    ]
+  }
+}

@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>知途 talentgraph · 岗位脉络 Graph</title>
+  <link rel="stylesheet" href="assets/ui.css?v=closed-loop-20260903-graphfullscreen3">
+</head>
+<body>
+  <div class="app-shell" id="shell"></div>
+  <script src="assets/ui.js?v=closed-loop-20260829-mainline1"></script>
+  <script>
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const PALETTE = ["#19a889", "#6f8cff", "#a66ee8", "#f0a14a", "#ef6f8e", "#39a9db", "#5fbd72"];
+    const localDemo = location.protocol === "file:" || ["127.0.0.1", "localhost"].includes(location.hostname);
+    // Production uses the same-origin reverse-proxy path; local development
+    // keeps the fixed graph API port. Do not switch APIs through URL params.
+    const GRAPH_API_BASE = localDemo ? "http://127.0.0.1:8010" : "";
+    let graphData = { nodes: [], edges: [] };
+    let view = { x: 0, y: 0, scale: 1 };
+    let dragging = false;
+    let dragPoint = null;
+    let selectedNodeId = "";
+    const OPENINGS_PAGE_SIZE = 12;
+    let openingsState = { page: 1, pageSize: OPENINGS_PAGE_SIZE, total: 0, totalPages: 0 };
+
+    $("shell").innerHTML = navShell(
+      "panorama",
+      "岗位脉络 Graph",
+      "选择一个岗位，查看它需要的能力结构。"
+    ) + `
+      <main id="mainContent" class="page graph-page">
+        <section class="panel graph-console">
+          <div class="toolbar">
+            <div class="wide role-filter">
+              <label for="role">选择岗位</label>
+              <select id="role"></select>
+            </div>
+            <div>
+              <label for="stack">技术方向</label>
+              <select id="stack"><option value="">全部技术栈</option></select>
+            </div>
+            <div>
+              <label for="level">经验层级</label>
+              <select id="level"><option value="">全部级别</option></select>
+            </div>
+            <div>
+              <label for="window">时间范围</label>
+              <select id="window"><option value="">全部时间</option></select>
+            </div>
+            <div>
+              <label for="limit">展示能力数</label>
+              <select id="limit"><option>20</option><option selected>30</option><option>40</option><option>50</option></select>
+            </div>
+            <div>
+              <label for="support">最低出现比例</label>
+              <div class="range-row">
+                <input id="support" type="range" min="0" max="0.8" step="0.05" value="0">
+                <span id="supportValue" class="range-value">0%</span>
+              </div>
+            </div>
+            <div class="actions right">
+              <button id="refresh" class="primary" type="button">更新图谱</button>
+            </div>
+          </div>
+
+          <div class="split-panel graph-workspace">
+            <section class="panel graph-panel">
+              <div class="panel-head">
+                <div class="panel-title graph-heading">
+                  <h2 id="graphTitle">岗位能力星图</h2>
+                  <small>岗位 → 能力</small>
+                </div>
+                <a id="openingsCta" class="button primary openings-cta openings-inline-cta" href="#roleOpenings" aria-controls="roleOpenings">
+                  查看企业招聘机会 <span aria-hidden="true">↓</span>
+                </a>
+                <div class="actions">
+                  <div class="graph-legend" aria-label="图例"><span><i class="role-key"></i>岗位</span><span><i class="category-key"></i>能力模块</span><span><i class="skill-key"></i>能力点</span></div>
+                  <button id="zoomOut" type="button" title="缩小">-</button>
+                  <span id="zoomValue" class="code">100%</span>
+                  <button id="zoomIn" type="button" title="放大">+</button>
+                  <button id="zoomReset" type="button" aria-label="进入全屏" title="进入全屏"><span aria-hidden="true">⛶</span> 全屏</button>
+                </div>
+              </div>
+              <div class="timeline-row">
+                <span class="field-label" style="margin:0">时间切片</span>
+                <div id="timelineButtons" class="actions"></div>
+              </div>
+              <div id="graphWrap" class="graph-canvas">
+                <svg id="graph" viewBox="-900 -620 1800 1240" preserveAspectRatio="xMidYMid meet" aria-label="岗位能力知识图谱">
+                  <g id="viewport"></g>
+                </svg>
+                <div class="graph-tip">拖动查看 · 滚轮缩放</div>
+              </div>
+            </section>
+            <section id="roleOpenings" class="panel graph-openings" aria-labelledby="openingsTitle" tabindex="-1">
+              <div class="panel-head">
+                <div class="panel-title">
+                  <h2 id="openingsTitle">近期招聘机会</h2>
+                  <small id="openingsSubtitle">选择岗位后展示前程无忧招聘原页</small>
+                </div>
+                <span class="tag">来源：前程无忧</span>
+              </div>
+              <div id="openingsBody" class="openings-grid">
+                <div class="empty">正在读取该岗位的招聘信息…</div>
+              </div>
+              <div id="openingsPagination" class="openings-pagination" aria-label="招聘机会分页"></div>
+              <p class="openings-disclaimer">招聘信息具有时效性，是否仍在招聘、岗位要求及投递结果以前程无忧原页面为准。</p>
+            </section>
+          </div>
+        </section>
+      </main>
+    ` + closeShell();
+
+    function svgEl(name) {
+      return document.createElementNS(SVG_NS, name);
+    }
+
+    const ROLE_FAMILY_ORDER = [
+      "digital_product",
+      "ai",
+      "data",
+      "backend",
+      "client",
+      "quality",
+      "chip",
+      "electronics",
+      "infrastructure",
+      "intelligent_systems",
+      "enterprise_solutions",
+    ];
+
+    function renderRoleOptions(roles) {
+      const groups = new Map();
+      (roles || []).forEach((role) => {
+        const familyId = role.family_id || "unclassified";
+        if (!groups.has(familyId)) {
+          groups.set(familyId, {
+            familyId,
+            familyName: role.family_name || "其他岗位",
+            roles: [],
+          });
+        }
+        groups.get(familyId).roles.push(role);
+      });
+      const orderOf = (familyId) => {
+        const index = ROLE_FAMILY_ORDER.indexOf(familyId);
+        return index === -1 ? ROLE_FAMILY_ORDER.length : index;
+      };
+      return [...groups.values()]
+        .sort((left, right) => (
+          orderOf(left.familyId) - orderOf(right.familyId)
+          || left.familyName.localeCompare(right.familyName, "zh-CN")
+        ))
+        .map((group) => {
+          const options = group.roles
+            .sort((left, right) => left.role_name.localeCompare(right.role_name, "zh-CN"))
+            .map((role) => {
+              const selected = role.role_name === "产品经理" ? "selected" : "";
+              return `<option value="${esc(role.role_id)}" data-family-id="${esc(group.familyId)}" ${selected}>${esc(role.role_name)}</option>`;
+            })
+            .join("");
+          return `<optgroup label="${esc(group.familyName)}">${options}</optgroup>`;
+        })
+        .join("");
+    }
+
+    async function init() {
+      try {
+        setStatus("pageStatus", "正在准备岗位图谱", "warn");
+        const [health, facets, roles] = await Promise.all([
+          graphJSON("/api/health"),
+          graphJSON("/api/v1/facets"),
+          graphJSON("/api/v1/roles"),
+        ]);
+        const jds = health.counts?.jds || health.jds || 0;
+        setStatus("pageStatus", `岗位图谱已准备 · ${fmtNumber(jds)} 条招聘信息`, "ok");
+        $("stack").innerHTML = `<option value="">全部技术栈</option>${(facets.stacks || []).map((value) => `<option value="${esc(value)}">${esc(value)}</option>`).join("")}`;
+        $("level").innerHTML = `<option value="">全部级别</option>${(facets.levels || []).map((value) => {
+          const label = value.level_name || value;
+          return `<option value="${esc(label)}">${esc(label)}</option>`;
+        }).join("")}`;
+        $("role").innerHTML = renderRoleOptions(roles);
+        $("support").oninput = () => {
+          $("supportValue").textContent = fmtPercent(Number($("support").value), 0);
+        };
+        ["stack", "level", "window", "limit"].forEach((id) => $(id).onchange = loadGraph);
+        $("role").onchange = () => {
+          $("window").value = "";
+          loadGraph();
+        };
+        $("refresh").onclick = loadGraph;
+        setupZoom();
+        await loadGraph();
+      } catch (error) {
+        showGraphSetupError(error);
+      }
+    }
+
+    async function loadGraph() {
+      try {
+        setStatus("pageStatus", "正在生成岗位视图", "warn");
+        const params = new URLSearchParams({
+          role_id: $("role").value,
+          stack: $("stack").value,
+          level: $("level").value,
+          time_window: $("window").value,
+          min_support: $("support").value,
+          skill_limit: $("limit").value,
+        });
+        graphData = await graphJSON(`/api/v1/graph/panorama?${params}`);
+        syncWindows(graphData.available_windows || []);
+        renderTimeline(graphData.available_windows || []);
+        selectedNodeId = "";
+        resetZoom();
+        renderGraph();
+        renderSummary();
+        await loadRoleOpenings();
+        setStatus("pageStatus", `已更新 · ${fmtNumber(graphData.stats?.filtered_jds || 0)} 条招聘信息`, "ok");
+      } catch (error) {
+        showGraphSetupError(error);
+      }
+    }
+
+    function syncWindows(windows) {
+      const current = $("window").value;
+      $("window").innerHTML = `<option value="">全部时间</option>${windows.map((value) => `<option value="${esc(value)}">${esc(value)}</option>`).join("")}`;
+      if (windows.includes(current)) $("window").value = current;
+    }
+
+    function renderTimeline(windows) {
+      $("timelineButtons").innerHTML = ["", ...windows].map((value) => (
+        `<button class="${$("window").value === value ? "active" : ""}" data-window="${esc(value)}" type="button">${value || "全量"}</button>`
+      )).join("");
+      $("timelineButtons").querySelectorAll("button").forEach((button) => {
+        button.onclick = () => {
+          $("window").value = button.dataset.window;
+          loadGraph();
+        };
+      });
+    }
+
+    function renderSummary() {
+      const root = graphData.nodes.find((node) => node.type === "role");
+      const filters = graphData.filters || {};
+      const parts = [filters.stack || "全部技术栈", filters.level || "全部级别", filters.effective_time_window || "全部时间"];
+      $("graphTitle").textContent = root
+        ? `${root.label} · 能力图谱 · ${parts.join(" / ")}`
+        : "岗位能力图谱";
+    }
+
+    function evidenceTotal() {
+      return Number(graphData.stats?.evidence ?? graphData.stats?.evidence_count ?? 0);
+    }
+
+    function safe51jobUrl(value) {
+      try {
+        const url = new URL(String(value || ""));
+        const host = url.hostname.toLowerCase().replace(/\.$/, "");
+        if (!["http:", "https:"].includes(url.protocol)) return "";
+        if (url.username || url.password) return "";
+        if (url.port && !["80", "443"].includes(url.port)) return "";
+        if (host !== "51job.com" && !host.endsWith(".51job.com")) return "";
+        url.hash = "";
+        return url.href;
+      } catch (_) {
+        return "";
+      }
+    }
+
+    function openingFacts(item) {
+      return [item.location, item.salary, item.education, item.experience]
+        .filter(Boolean)
+        .map((value) => `<span>${esc(value)}</span>`)
+        .join("");
+    }
+
+    function renderOpeningsPagination(meta) {
+      const root = $("openingsPagination");
+      const page = Number(meta.page || 1);
+      const totalPages = Number(meta.total_pages || 0);
+      const total = Number(meta.total || 0);
+      openingsState = {
+        page,
+        pageSize: Number(meta.page_size || OPENINGS_PAGE_SIZE),
+        total,
+        totalPages,
+      };
+      if (!root || totalPages <= 1) {
+        if (root) root.innerHTML = total ? `<span class="openings-page-summary">共 ${fmtNumber(total)} 个岗位</span>` : "";
+        return;
+      }
+      const pages = [];
+      const addPage = (value) => {
+        if (!pages.includes(value)) pages.push(value);
+      };
+      addPage(1);
+      if (page > 3) pages.push("ellipsis-left");
+      for (let value = Math.max(2, page - 1); value <= Math.min(totalPages - 1, page + 1); value += 1) addPage(value);
+      if (page < totalPages - 2) pages.push("ellipsis-right");
+      if (totalPages > 1) addPage(totalPages);
+      root.innerHTML = `
+        <div class="openings-page-summary">第 ${fmtNumber(page)} / ${fmtNumber(totalPages)} 页 · 共 ${fmtNumber(total)} 个岗位</div>
+        <div class="openings-page-controls">
+          <button type="button" data-openings-page="${page - 1}" ${page <= 1 ? "disabled" : ""} aria-label="上一页">上一页</button>
+          ${pages.map((value) => value.toString().startsWith("ellipsis")
+            ? `<span class="openings-page-ellipsis" aria-hidden="true">…</span>`
+            : `<button type="button" data-openings-page="${value}" ${value === page ? 'class="active" aria-current="page"' : `aria-label="第 ${value} 页"`}>${value}</button>`).join("")}
+          <button type="button" data-openings-page="${page + 1}" ${page >= totalPages ? "disabled" : ""} aria-label="下一页">下一页</button>
+        </div>`;
+      root.querySelectorAll("button[data-openings-page]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const nextPage = Number(button.dataset.openingsPage);
+          if (!Number.isInteger(nextPage) || nextPage < 1 || nextPage > openingsState.totalPages) return;
+          loadRoleOpenings(nextPage).then(() => $("roleOpenings")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+        });
+      });
+    }
+
+    async function loadRoleOpenings(page = 1) {
+      const roleId = $("role").value;
+      const selected = $("role").selectedOptions[0];
+      const roleName = selected?.textContent?.trim() || "当前岗位";
+      $("openingsTitle").textContent = `${roleName} · 近期招聘机会`;
+      $("openingsSubtitle").textContent = "正在读取前程无忧招聘信息";
+      $("openingsBody").innerHTML = `<div class="empty">正在读取招聘信息…</div>`;
+      $("openingsPagination").innerHTML = "";
+      if (!roleId) return;
+      try {
+        const safePage = Math.max(1, Number(page) || 1);
+        const data = await graphJSON(`/api/v1/roles/${encodeURIComponent(roleId)}/openings?page=${safePage}&page_size=${OPENINGS_PAGE_SIZE}`);
+        const openings = (data.items || data.openings || []).filter((item) => safe51jobUrl(item.job_url));
+        renderOpeningsPagination(data);
+        $("openingsSubtitle").textContent = openings.length
+          ? `展示第 ${data.page || safePage} 页 ${openings.length} 条招聘信息，共 ${data.total || openings.length} 个岗位`
+          : "暂未找到带原始链接的前程无忧招聘信息";
+        if (!openings.length) {
+          $("openingsBody").innerHTML = `<div class="empty">该岗位当前没有可直接跳转的前程无忧记录。可以稍后刷新，或等待下一轮数据采集。</div>`;
+          $("openingsPagination").innerHTML = "";
+          return;
+        }
+        $("openingsBody").innerHTML = openings.map((item) => {
+          const jobUrl = safe51jobUrl(item.job_url);
+          return `
+            <article class="opening-card">
+              <div class="opening-card-head">
+                <div>
+                  <h3>${esc(item.title || roleName)}</h3>
+                  <p>${esc(item.company_name || "企业名称未公开")}</p>
+                </div>
+                <span class="tag ok">前程无忧</span>
+              </div>
+              <div class="opening-facts">${openingFacts(item) || "<span>岗位条件详见原页面</span>"}</div>
+              <p class="opening-date">发布日期：${esc(item.posted_at || "未注明")} · 是否在招以平台页面为准</p>
+              <details class="opening-detail">
+                <summary>查看岗位详细信息</summary>
+                <div>${esc(item.description || "暂无岗位描述，请前往招聘原页查看。")}</div>
+              </details>
+              <div class="actions right">
+                <a class="button primary" href="${esc(jobUrl)}" target="_blank" rel="noopener noreferrer">前往前程无忧招聘原页</a>
+              </div>
+            </article>`;
+        }).join("");
+      } catch (error) {
+        $("openingsSubtitle").textContent = "招聘链接暂时无法读取";
+        $("openingsBody").innerHTML = `<div class="empty">招聘机会服务暂时不可用，不影响岗位能力图谱查看。</div>`;
+        $("openingsPagination").innerHTML = "";
+      }
+    }
+
+    function splitLabel(text, maxUnits = 16) {
+      const chars = [...String(text || "")];
+      const lines = [""];
+      let units = 0;
+      for (const char of chars) {
+        const size = /[^\x00-\xff]/.test(char) ? 1.7 : 1;
+        if (units + size > maxUnits && lines[lines.length - 1]) {
+          lines.push("");
+          units = 0;
+        }
+        lines[lines.length - 1] += char;
+        units += size;
+      }
+      return lines.slice(0, 2);
+    }
+
+    function nodeBox(node) {
+      if (node.type === "role") return { w: 260, h: 104, rx: 24 };
+      if (node.type === "category") return { w: 210, h: 82, rx: 19 };
+      const lines = splitLabel(node.label);
+      return { w: Math.max(188, Math.min(260, visualLength(node.label) * 9 + 64)), h: lines.length > 1 ? 82 : 66, rx: 14 };
+    }
+
+    function visualLength(text) {
+      return [...String(text || "")].reduce((sum, char) => sum + (/[^\x00-\xff]/.test(char) ? 1.7 : 1), 0);
+    }
+
+    function buildLayout(root, categories, skills) {
+      const positions = new Map();
+      if (!root) return positions;
+      positions.set(root.id, { x: 0, y: 0, depth: 0, color: "#f26f3d", ...nodeBox(root) });
+      const count = Math.max(categories.length, 1);
+      const categoryRadius = count <= 3 ? 270 : 300;
+      const sector = 2 * Math.PI / count;
+      const usableSpan = Math.min(1.14, sector * 0.86);
+      const nodeGap = 248;
+      categories.forEach((category, index) => {
+        const angle = -Math.PI / 2 + sector * index;
+        const color = PALETTE[index % PALETTE.length];
+        positions.set(category.id, { x: Math.cos(angle) * categoryRadius, y: Math.sin(angle) * categoryRadius, depth: 1, color, ...nodeBox(category) });
+        const categorySkills = skills.filter((skill) => skill.category === category.label);
+        let cursor = 0;
+        let ring = 0;
+        while (cursor < categorySkills.length) {
+          const radius = 430 + ring * 145;
+          const capacity = Math.max(2, Math.floor(radius * usableSpan / nodeGap) + 1);
+          const items = categorySkills.slice(cursor, cursor + capacity);
+          const spread = items.length === 1 ? 0 : Math.min(usableSpan, (items.length - 1) * nodeGap / radius);
+          items.forEach((skill, slot) => {
+            const skillAngle = items.length === 1 ? angle : angle - spread / 2 + spread * slot / (items.length - 1);
+            positions.set(skill.id, {
+              x: Math.cos(skillAngle) * radius,
+              y: Math.sin(skillAngle) * radius,
+              depth: 2,
+              color,
+              ...nodeBox(skill),
+            });
+          });
+          cursor += capacity;
+          ring += 1;
+        }
+      });
+      resolveNodeOverlaps(positions);
+      return positions;
+    }
+
+    function resolveNodeOverlaps(positions) {
+      const nodes = [...positions.values()];
+      const isAnchor = (node) => node.depth < 2;
+      const gap = 34;
+
+      for (let pass = 0; pass < 90; pass += 1) {
+        let moved = false;
+        for (let i = 0; i < nodes.length; i += 1) {
+          for (let j = i + 1; j < nodes.length; j += 1) {
+            const a = nodes[i];
+            const b = nodes[j];
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const requiredX = (a.w + b.w) / 2 + gap;
+            const requiredY = (a.h + b.h) / 2 + gap;
+            const pushX = requiredX - Math.abs(dx);
+            const pushY = requiredY - Math.abs(dy);
+            if (pushX <= 0 || pushY <= 0) continue;
+
+            const horizontal = pushX < pushY;
+            const amount = horizontal ? pushX : pushY;
+            const sign = (horizontal ? dx : dy) === 0 ? 1 : Math.sign(horizontal ? dx : dy);
+            const aAnchor = isAnchor(a);
+            const bAnchor = isAnchor(b);
+
+            if (aAnchor && bAnchor) continue;
+            if (aAnchor) {
+              if (horizontal) b.x += sign * amount;
+              else b.y += sign * amount;
+            } else if (bAnchor) {
+              if (horizontal) a.x -= sign * amount;
+              else a.y -= sign * amount;
+            } else {
+              if (horizontal) {
+                a.x -= sign * amount / 2;
+                b.x += sign * amount / 2;
+              } else {
+                a.y -= sign * amount / 2;
+                b.y += sign * amount / 2;
+              }
+            }
+            moved = true;
+          }
+        }
+        if (!moved) break;
+      }
+    }
+
+    function renderGraph() {
+      const viewport = $("viewport");
+      viewport.innerHTML = "";
+      const root = graphData.nodes.find((node) => node.type === "role");
+      const categories = graphData.nodes.filter((node) => node.type === "category");
+      const skills = graphData.nodes.filter((node) => node.type === "skill");
+      const positions = buildLayout(root, categories, skills);
+      if (!root) {
+        viewport.innerHTML = `<text x="0" y="0" class="empty-text">当前条件下暂无图谱数据</text>`;
+        return;
+      }
+      const categoryColors = new Map(categories.map((category) => [category.label, positions.get(category.id)?.color || PALETTE[0]]));
+      graphData.edges.forEach((edge) => {
+        const from = positions.get(edge.source);
+        const to = positions.get(edge.target);
+        if (!from || !to) return;
+        const path = svgEl("path");
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const bend = edge.target.startsWith("skill:") ? 0.035 : 0.06;
+        const cx = (from.x + to.x) / 2 - dy * bend;
+        const cy = (from.y + to.y) / 2 + dx * bend;
+        const target = graphData.nodes.find((node) => node.id === edge.target);
+        path.setAttribute("class", `graph-edge ${edge.target.startsWith("skill:") ? "skill-edge" : "category-edge"}`);
+        path.style.stroke = target?.type === "skill" ? (categoryColors.get(target.category) || PALETTE[0]) : (to.color || "#7089aa");
+        path.setAttribute("d", `M${from.x},${from.y} Q${cx},${cy} ${to.x},${to.y}`);
+        viewport.appendChild(path);
+      });
+      [...skills, ...categories, root].forEach((node) => drawNode(viewport, node, positions.get(node.id), skills));
+      fitGraph(positions);
+    }
+
+    function drawNode(viewport, node, position, skills) {
+      if (!node || !position) return;
+      const group = svgEl("g");
+      group.setAttribute("class", `graph-node graph-star-node ${selectedNodeId === node.id ? "selected" : ""}`);
+      group.dataset.nodeId = node.id;
+      group.setAttribute("transform", `translate(${position.x} ${position.y})`);
+      group.style.setProperty("--node-color", position.color);
+      const halo = svgEl("rect");
+      halo.setAttribute("class", "node-halo");
+      halo.setAttribute("x", -position.w / 2 - 5);
+      halo.setAttribute("y", -position.h / 2 - 5);
+      halo.setAttribute("width", position.w + 10);
+      halo.setAttribute("height", position.h + 10);
+      halo.setAttribute("rx", position.rx + 5);
+      halo.setAttribute("fill", position.color);
+      group.appendChild(halo);
+      const shape = svgEl("rect");
+      shape.setAttribute("class", "node-shape");
+      shape.setAttribute("x", -position.w / 2);
+      shape.setAttribute("y", -position.h / 2);
+      shape.setAttribute("width", position.w);
+      shape.setAttribute("height", position.h);
+      shape.setAttribute("rx", position.rx);
+      shape.setAttribute("fill", node.type === "role" ? "#fff7f2" : node.type === "category" ? position.color : "#ffffff");
+      shape.setAttribute("fill-opacity", node.type === "category" ? "0.13" : "0.98");
+      shape.setAttribute("stroke", position.color);
+      shape.setAttribute("stroke-width", node.type === "role" ? 2.4 : node.type === "category" ? 2 : 1.7);
+      group.appendChild(shape);
+      if (node.type === "skill") {
+        const signal = svgEl("circle");
+        signal.setAttribute("class", "node-signal");
+        signal.setAttribute("cx", -position.w / 2 + 16);
+        signal.setAttribute("cy", "0");
+        signal.setAttribute("r", "3.5");
+        signal.setAttribute("fill", position.color);
+        group.appendChild(signal);
+      }
+      const label = svgEl("text");
+      splitLabel(node.label, node.type === "role" ? 20 : 15).forEach((line, index, lines) => {
+        const tspan = svgEl("tspan");
+        tspan.setAttribute("x", node.type === "skill" ? "5" : "0");
+        const offset = node.type === "skill" ? 0 : -6;
+        tspan.setAttribute("y", offset + (index - (lines.length - 1) / 2) * 19);
+        tspan.textContent = line;
+        label.appendChild(tspan);
+      });
+      group.appendChild(label);
+      if (node.type !== "skill") {
+        const sub = svgEl("text");
+        sub.setAttribute("class", "node-subtitle");
+        sub.setAttribute("y", node.type === "role" ? 22 : 18);
+        sub.textContent = node.type === "role" ? "CENTRAL ROLE" : `${skills.filter((skill) => skill.category === node.label).length} ABILITIES`;
+        group.appendChild(sub);
+      }
+      const title = svgEl("title");
+      title.textContent = node.label;
+      group.appendChild(title);
+      group.onclick = (event) => {
+        event.stopPropagation();
+        selectedNodeId = node.id;
+        document.querySelectorAll(".graph-node").forEach((item) => item.classList.toggle("selected", item.dataset.nodeId === node.id));
+      };
+      viewport.appendChild(group);
+    }
+
+    function fitGraph(positions) {
+      const values = [...positions.values()];
+      if (!values.length) return;
+      const minX = Math.min(...values.map((p) => p.x - p.w / 2));
+      const maxX = Math.max(...values.map((p) => p.x + p.w / 2));
+      const minY = Math.min(...values.map((p) => p.y - p.h / 2));
+      const maxY = Math.max(...values.map((p) => p.y + p.h / 2));
+      let width = Math.max(1180, maxX - minX + 180);
+      let height = Math.max(780, maxY - minY + 160);
+      const wrap = $("graphWrap");
+      const aspect = Math.max(1, wrap.clientWidth / Math.max(wrap.clientHeight, 1));
+      if (width / height < aspect) width = height * aspect;
+      if (width / height > aspect) height = width / aspect;
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      $("graph").setAttribute("viewBox", `${centerX - width / 2} ${centerY - height / 2} ${width} ${height}`);
+    }
+
+    function graphJSON(path) {
+      return getJSON(`${GRAPH_API_BASE}${path}`);
+    }
+
+    function setupZoom() {
+      const svg = $("graph");
+      const graphPanel = document.querySelector(".graph-panel");
+      const fullscreenButton = $("zoomReset");
+      $("zoomIn").onclick = () => zoomBy(1.18);
+      $("zoomOut").onclick = () => zoomBy(0.85);
+      const syncFullscreenButton = () => {
+        const active = document.fullscreenElement === graphPanel;
+        fullscreenButton.innerHTML = active
+          ? '<span aria-hidden="true">×</span> 退出全屏'
+          : '<span aria-hidden="true">⛶</span> 全屏';
+        fullscreenButton.setAttribute("aria-label", active ? "退出全屏" : "进入全屏");
+        fullscreenButton.title = active ? "退出全屏" : "进入全屏";
+      };
+      fullscreenButton.onclick = async () => {
+        try {
+          if (document.fullscreenElement === graphPanel) {
+            await document.exitFullscreen();
+          } else if (graphPanel?.requestFullscreen) {
+            await graphPanel.requestFullscreen();
+          }
+        } catch (_) {
+          setStatus("pageStatus", "全屏模式暂不可用", "warn");
+        }
+      };
+      document.addEventListener("fullscreenchange", syncFullscreenButton);
+      syncFullscreenButton();
+      svg.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        zoomBy(event.deltaY < 0 ? 1.08 : 0.92);
+      }, { passive: false });
+      svg.addEventListener("pointerdown", (event) => {
+        if (event.target.closest(".graph-node")) return;
+        dragging = true;
+        dragPoint = { x: event.clientX, y: event.clientY };
+        svg.setPointerCapture(event.pointerId);
+      });
+      svg.addEventListener("pointermove", (event) => {
+        if (!dragging || !dragPoint) return;
+        const viewBox = svg.viewBox.baseVal;
+        const factor = viewBox.width / Math.max(svg.clientWidth, 1) / view.scale;
+        view.x += (event.clientX - dragPoint.x) * factor;
+        view.y += (event.clientY - dragPoint.y) * factor;
+        dragPoint = { x: event.clientX, y: event.clientY };
+        applyView();
+      });
+      const stop = () => {
+        dragging = false;
+        dragPoint = null;
+      };
+      svg.addEventListener("pointerup", stop);
+      svg.addEventListener("pointerleave", stop);
+      svg.addEventListener("click", (event) => {
+        if (event.target === svg) {
+          selectedNodeId = "";
+          document.querySelectorAll(".graph-node").forEach((item) => item.classList.remove("selected"));
+        }
+      });
+    }
+
+    function zoomBy(factor) {
+      view.scale = Math.max(0.48, Math.min(3.2, view.scale * factor));
+      applyView();
+    }
+
+    function resetZoom() {
+      view = { x: 0, y: 0, scale: 1 };
+      applyView();
+    }
+
+    function applyView() {
+      $("viewport").setAttribute("transform", `translate(${view.x} ${view.y}) scale(${view.scale})`);
+      $("zoomValue").textContent = fmtPercent(view.scale, 0);
+    }
+
+    function showGraphSetupError(error) {
+      setStatus("pageStatus", "岗位数据暂未连接", "error");
+      $("role").innerHTML = `<option>岗位数据暂不可用</option>`;
+      $("stack").innerHTML = `<option>全部技术栈</option>`;
+      $("level").innerHTML = `<option>全部级别</option>`;
+      $("window").innerHTML = `<option>全部时间</option>`;
+      $("timelineButtons").innerHTML = "";
+      $("viewport").innerHTML = "";
+      $("graphTitle").textContent = "岗位能力图谱";
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>数据维护监控 · 岗位能力知识图谱</title>
+  <link rel="stylesheet" href="assets/ui.css?v=closed-loop-20260829-mainline1">
+</head>
+<body>
+  <div class="app-shell" id="shell"></div>
+  <script src="assets/ui.js?v=closed-loop-20260829-mainline1"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const localDemo = location.protocol === "file:" || ["localhost", "127.0.0.1"].includes(location.hostname);
+    const graphBase = params.get("graphApi") || (localDemo ? "http://127.0.0.1:8010" : "");
+    const phases = [
+      {key:"collect",label:"数据采集",note:"多来源增量读取"},
+      {key:"clean_import",label:"清洗入库",note:"去重、过滤与能力抽取"},
+      {key:"normalize_publish",label:"归一化分析",note:"岗位技能标准化"},
+      {key:"complete",label:"图谱发布",note:"更新活动图谱版本"},
+    ];
+
+    $("shell").innerHTML = navShell("maintenance","数据维护监控","查看自动采集、清洗归一化与知识图谱发布进度") + `
+      <main id="mainContent" class="page maintenance-page">
+        <section class="maintenance-hero" aria-labelledby="maintenanceTitle">
+          <div class="maintenance-hero-head">
+            <div><span class="maintenance-kicker">AUTOMATED GRAPH MAINTENANCE</span><h2 id="maintenanceTitle">知识图谱自动维护</h2><p id="maintenanceMessage">正在连接维护状态服务…</p></div>
+            <span id="runState" class="maintenance-run-state">连接中</span>
+          </div>
+          <div class="maintenance-progress-track" aria-label="本轮总体进度"><i id="progressBar"></i></div>
+          <div class="maintenance-progress-meta"><span id="progressMeta">等待状态</span><strong id="progressValue">0%</strong></div>
+          <div class="maintenance-stages" id="stageList"></div>
+        </section>
+        <section class="maintenance-metrics" aria-label="本轮维护指标">
+          <article class="maintenance-metric"><span>本轮新增采集</span><strong id="rowsAdded">—</strong><small>去重后新增原始记录</small></article>
+          <article class="maintenance-metric"><span>进入清洗流程</span><strong id="rowsSelected">—</strong><small>受控上限内的待处理样本</small></article>
+          <article class="maintenance-metric"><span>受影响旧岗位</span><strong id="updatedRoles">—</strong><small>局部重算的标准岗位</small></article>
+          <article class="maintenance-metric"><span>新岗位候选</span><strong id="newRoles">—</strong><small>完成证据检查后的候选</small></article>
+          <article class="maintenance-metric"><span>技能关系更新</span><strong id="updatedSkillEdges">—</strong><small>完成归一化后新增或更新的边</small></article>
+        </section>
+        <section class="maintenance-panels">
+          <article class="maintenance-panel">
+            <div class="maintenance-panel-head"><div><h3>多平台数据读取</h3><p>所有来源统一汇总后进入同一条清洗与入图流程</p></div><code id="cycleId">RUN —</code></div>
+            <div class="maintenance-platform-list" id="platformList"></div>
+          </article>
+          <aside class="maintenance-panel">
+            <div class="maintenance-panel-head"><div><h3>运行信息</h3><p>自动刷新，无需手动操作</p></div></div>
+            <div class="maintenance-facts">
+              <div class="maintenance-fact"><span>本轮开始</span><strong id="startedAt">—</strong></div>
+              <div class="maintenance-fact"><span>最近更新</span><strong id="updatedAt">—</strong></div>
+              <div class="maintenance-fact"><span>最近成功闭环</span><strong id="lastSuccessAt">尚无成功记录</strong><small id="freshnessState">上线验收不会把“仅运行过”视为成功</small></div>
+              <div class="maintenance-fact"><span>图谱发布</span><strong id="publishState">等待本轮处理</strong></div>
+              <div class="maintenance-fact"><span>下一轮运行</span><strong id="nextRun">本轮完成后约 12 小时</strong></div>
+              <div class="maintenance-fact"><span>刷新机制</span><strong>页面每 15 秒同步一次安全进度快照</strong><small class="maintenance-refresh-note">不展示密钥、岗位原文或服务器日志</small></div>
+            </div>
+          </aside>
+        </section>
+      </main>` + closeShell();
+
+    function numberOrDash(value) { return value === null || value === undefined ? "—" : fmtNumber(value); }
+    function formatTime(value) {
+      if (!value) return "—";
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("zh-CN",{hour12:false});
+    }
+    function statusLabel(status) {
+      return ({running:"运行中",success:"本轮已完成",planned:"演练已完成",partial_failure:"部分步骤待恢复",interrupted:"等待自动重试",cancelled:"本轮已停止，等待下次运行",idle:"等待首次运行"})[status] || "等待状态同步";
+    }
+    function renderStages(data) {
+      const activeIndex = Math.max(0,phases.findIndex((item)=>item.key===data.phase));
+      const failed = ["partial_failure","interrupted"].includes(data.status);
+      const publishCompleted = ["COMPLETED","success"].includes((data.graph_updates||{}).publish_status);
+      $("stageList").innerHTML = phases.map((item,index)=>{
+        const done=data.status==="success"||index<activeIndex||(item.key==="complete"&&publishCompleted);
+        const active=data.status==="running"&&index===activeIndex;
+        const error=failed&&item.key==="complete"&&!publishCompleted;
+        const className=error?"is-error":active?"is-active":done?"is-done":"";
+        const marker=error?"需要检查":active?"进行中":done?"已完成":"等待中";
+        return `<div class="maintenance-stage ${className}"><span>0${index+1}</span><b>${item.label}</b><small>${marker} · ${item.note}</small></div>`;
+      }).join("");
+    }
+    function renderPlatforms(data) {
+      const publishCompleted=["COMPLETED","success"].includes((data.graph_updates||{}).publish_status);
+      const running=data.status==="running"&&data.phase==="collect";
+      const status=running?"running":publishCompleted?"success":"pending";
+      const label=running?"多平台数据读取中":publishCompleted?"多平台数据读取完成":"等待多平台数据读取";
+      const detail=running?"正在汇总新增岗位数据":publishCompleted?"可用数据已统一进入清洗与知识图谱流程":"等待下一轮自动任务";
+      const percent=Math.max(0,Math.min(100,Number(data.progress_percent||0)));
+      $("platformList").innerHTML=`<div class="maintenance-platform is-${status}"><div class="maintenance-platform-head"><i></i><div><b>${label}</b><small>${detail}</small></div></div><div class="maintenance-platform-progress" aria-label="多平台数据读取总体进度"><i style="width:${percent}%"></i></div><div class="maintenance-platform-count"><b>${fmtNumber((data.totals||{}).rows_added||0)}</b><small>汇总新增记录</small></div></div>`;
+    }
+    function render(data) {
+      const percent=Math.max(0,Math.min(100,Number(data.progress_percent||0)));
+      const totals=data.totals||{};
+      const updates=data.graph_updates||{};
+      const publishCompleted=["COMPLETED","success"].includes(updates.publish_status);
+      const displayStatus=publishCompleted&&data.status!=="running"?"success":data.status;
+      const phaseMessages={collect:"多平台数据读取中",clean_import:"数据清洗与能力抽取中",normalize_publish:"岗位技能归一化与图谱发布中",complete:"多平台数据已完成清洗并更新知识图谱",cancelled:"本轮采集已停止，当前图谱继续正常使用"};
+      $("maintenanceMessage").textContent=phaseMessages[data.phase]||"维护状态已连接";
+      $("runState").textContent=statusLabel(displayStatus);
+      $("runState").className=`maintenance-run-state ${["partial_failure","interrupted"].includes(displayStatus)?"is-error":""}`;
+      $("progressBar").style.width=`${percent}%`;
+      $("progressValue").textContent=`${percent.toFixed(percent%1?1:0)}%`;
+      $("progressMeta").textContent=data.status==="running"?(phaseMessages[data.phase]||"自动维护运行中"):statusLabel(displayStatus);
+      $("rowsAdded").textContent=numberOrDash(totals.rows_added);
+      $("rowsSelected").textContent=numberOrDash(totals.rows_selected_for_import);
+      $("updatedRoles").textContent=numberOrDash(updates.updated_roles);
+      $("newRoles").textContent=numberOrDash(updates.new_role_candidates);
+      $("updatedSkillEdges").textContent=numberOrDash(updates.updated_skill_edges);
+      $("cycleId").textContent=data.cycle_id?`RUN ${data.cycle_id.slice(0,15)}`:"RUN —";
+      $("startedAt").textContent=formatTime(data.started_at);
+      $("updatedAt").textContent=formatTime(data.updated_at||data.fetched_at);
+      const freshness=data.freshness||{};
+      $("lastSuccessAt").textContent=data.last_success_at?formatTime(data.last_success_at):"尚无成功记录";
+      $("freshnessState").textContent=publishCompleted?"多平台可用数据已完成清洗并发布":(({fresh:"数据在有效期内",fresh_with_warnings:"数据已发布",running:"新一轮正在运行，沿用最近成功版本",stale:"数据已超过更新周期",degraded:"最近一轮未完成图谱发布",never:"尚未形成成功闭环"})[freshness.state]||"等待闭环状态");
+      $("publishState").textContent=({COMPLETED:"已发布到活动知识图谱",success:"发布成功",failed:"发布失败",skipped:"本轮无新增，保留当前版本",cancelled:"本轮未发布，保留当前图谱",pending:"等待本轮处理"})[updates.publish_status]||"等待本轮处理";
+      if(data.finished_at){const next=new Date(data.finished_at);next.setHours(next.getHours()+Number(data.schedule?.interval_hours||12));$("nextRun").textContent=`约 ${formatTime(next.toISOString())}（最多错峰 15 分钟）`;}
+      else{$("nextRun").textContent="本轮完成后约 12 小时（最多错峰 15 分钟）";}
+      renderStages(data);renderPlatforms(data);
+      setStatus("pageStatus",`${statusLabel(displayStatus)} · ${formatTime(data.updated_at||data.fetched_at)}`,["partial_failure","interrupted"].includes(displayStatus)?"warn":"ok");
+    }
+    async function refreshStatus(){
+      try{render(await getJSON(`${graphBase}/api/v1/maintenance/status`));}
+      catch(error){$("maintenanceMessage").textContent="暂时无法读取维护状态，请稍后自动重试";$("runState").textContent="连接失败";$("runState").className="maintenance-run-state is-error";setStatus("pageStatus","维护状态服务暂不可用","warn");}
+    }
+    renderStages({phase:"collect",status:"idle"});renderPlatforms({platforms:[]});refreshStatus();window.setInterval(refreshStatus,15000);
+  </script>
+</body>
+</html>

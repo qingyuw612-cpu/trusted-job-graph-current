@@ -1,0 +1,20 @@
+# ===== 敏感信息 =====
+.env
+.env.bak
+.env.*
+!.env.example
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ===== 生成物 =====
+results/
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.swp

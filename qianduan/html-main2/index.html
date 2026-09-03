@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>岗位能力图谱工作台</title>
+  <link rel="stylesheet" href="assets/ui.css">
+</head>
+<body>
+  <div class="app-shell" id="shell"></div>
+  <script src="assets/ui.js"></script>
+  <script>
+    $("shell").innerHTML = navShell(
+      "index",
+      "岗位能力图谱工作台",
+      "选择要完成的任务：看图谱、审新岗、匹配简历"
+    ) + `
+      <main id="mainContent" class="page page-grid">
+        <section class="card radar-console" aria-labelledby="radarTitle">
+          <div class="radar-visual" id="radarVisual" aria-hidden="true">
+            <span class="radar-ring ring-1"></span>
+            <span class="radar-ring ring-2"></span>
+            <span class="radar-ring ring-3"></span>
+            <span class="radar-cross horizontal"></span>
+            <span class="radar-cross vertical"></span>
+            <span class="radar-sweep"></span>
+            <i class="radar-blip blip-1"></i><i class="radar-blip blip-2"></i><i class="radar-blip blip-3"></i>
+            <b id="radarPercent">0%</b>
+          </div>
+          <div class="radar-content">
+            <div class="radar-heading">
+              <div>
+                <span class="eyebrow">LIVE JOB SIGNAL</span>
+                <h2 id="radarTitle">新岗位动态雷达</h2>
+                <p>从招聘平台限量采集 JD，自动增量写入 Neo4j，并在发布后识别新岗位与能力变化。</p>
+              </div>
+              <span id="radarTag" class="tag ok">监测待命</span>
+            </div>
+            <div class="radar-controls">
+              <div><label for="radarMode">监测范围</label><select id="radarMode"><option value="full" selected>全量关键词池</option><option value="quick">快速抽样</option><option value="target">指定岗位</option></select></div>
+              <div><label for="radarPlatform">数据来源</label><select id="radarPlatform"><option value="all" selected>三平台联合</option><option value="zhilian">智联招聘</option><option value="51job">前程无忧</option><option value="liepin">猎聘</option></select></div>
+              <div><label for="radarPages">每词页数</label><select id="radarPages"><option value="1" selected>1 页</option><option value="2">2 页</option><option value="3">3 页</option></select></div>
+              <div><label for="radarLimit">本轮 JD 上限</label><select id="radarLimit"><option value="100">100 条</option><option value="300" selected>300 条</option><option value="500">500 条</option><option value="1000">1000 条</option><option value="2000">2000 条</option></select></div>
+              <div class="radar-keyword" id="radarKeywordField" hidden><label for="radarKeyword">指定岗位</label><select id="radarKeyword"></select></div>
+              <button id="startRadar" class="primary" type="button">启动全量岗位雷达</button>
+            </div>
+            <div class="radar-progress" aria-live="polite">
+              <div class="radar-progress-head"><strong id="radarMessage">雷达在线，等待启动监测</strong><span id="radarStage">待命</span></div>
+              <div class="progress-track"><i id="radarProgressBar"></i></div>
+              <div class="radar-result"><span id="radarResult">73 个岗位关键词 × 北上广深；达到本轮 JD 上限后停止继续遍历。</span><a id="radarReviewLink" href="emerging-roles.html" hidden>查看新岗位结果 →</a></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="launch-grid" aria-label="核心任务入口">
+          <article class="card task-card">
+            <div class="task-card-head">
+              <div>
+                <h2>岗位能力图谱</h2>
+                <p>从一个岗位出发，查看能力模块、能力点和可追溯的 JD 证据。</p>
+              </div>
+              <span id="graphTaskTag" class="tag">检测中</span>
+            </div>
+            <div class="evidence-chain" aria-hidden="true">
+              <span>岗位</span><i></i><span>能力点</span><i></i><span>JD 证据</span>
+            </div>
+            <dl class="status-list">
+              <div><dt>当前状态</dt><dd id="graphService">检测中</dd></div>
+              <div><dt>最近结果</dt><dd id="graphHint" class="truncate">等待证据服务</dd></div>
+              <div><dt>下一步</dt><dd>进入图谱并选择中心岗位</dd></div>
+            </dl>
+            <div class="task-outcome">
+              <b>核心结果</b>
+              <span>岗位到能力模块、能力点的关系</span>
+              <span>按季度观察能力变化</span>
+            </div>
+            <div class="actions right">
+              <a class="button primary" href="panorama.html">进入岗位图谱</a>
+            </div>
+          </article>
+
+          <article class="card task-card">
+            <div class="task-card-head">
+              <div>
+                <h2>人岗差距分析</h2>
+                <p>上传简历，选择目标岗位，查看技能缺口和补齐路径。</p>
+              </div>
+              <span id="resumeTaskTag" class="tag">检测中</span>
+            </div>
+            <div class="evidence-chain gap-chain" aria-hidden="true">
+              <span>简历技能</span><i></i><span>岗位要求</span><i></i><span>缺失项</span>
+            </div>
+            <dl class="status-list">
+              <div><dt>当前状态</dt><dd id="resumeService">检测中</dd></div>
+              <div><dt>最近结果</dt><dd id="resumeHint" class="truncate">等待分析服务</dd></div>
+              <div><dt>下一步</dt><dd>上传简历并输入模型 Key</dd></div>
+            </dl>
+            <div class="task-outcome">
+              <b>核心结果</b>
+              <span>候选岗位匹配排名</span>
+              <span>技能缺失项与优先级</span>
+            </div>
+            <div class="actions right">
+              <a class="button primary" href="resume-match.html">进入简历匹配</a>
+            </div>
+          </article>
+
+          <article class="card task-card">
+            <div class="task-card-head">
+              <div>
+                <h2>新岗位发现</h2>
+                <p>审核新增岗位、新兴细分，并查看旧岗位能力变化。</p>
+              </div>
+              <span class="tag ok">可预览</span>
+            </div>
+            <div class="evidence-chain review-chain" aria-hidden="true">
+              <span>涌现信号</span><i></i><span>岗位定义</span><i></i><span>审核状态</span>
+            </div>
+            <dl class="status-list">
+              <div><dt>当前状态</dt><dd>候选数据已加载</dd></div>
+              <div><dt>最近结果</dt><dd>新增岗位、能力增强与能力减少已纳入</dd></div>
+              <div><dt>下一步</dt><dd>选择候选岗位并完成审核动作</dd></div>
+            </dl>
+            <div class="task-outcome">
+              <b>核心结果</b>
+              <span>新岗位涌现排名和岗位定义</span>
+              <span>旧岗位能力更新的分类视图</span>
+            </div>
+            <div class="actions right">
+              <a class="button primary" href="emerging-roles.html">进入新岗位发现</a>
+            </div>
+          </article>
+        </section>
+
+        <section class="grid-2">
+          <aside class="panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <h2>术语提示</h2>
+                <small>用业务语言理解页面里的关键词</small>
+              </div>
+              <button id="refreshStatus" type="button">检测可选服务</button>
+            </div>
+            <div class="panel-body detail-stack">
+              <dl class="term-list">
+                <div><dt>JD</dt><dd>招聘岗位描述，是岗位能力和任职要求的原始证据。</dd></div>
+                <div><dt>回标</dt><dd>把能力点追溯到具体 JD 原文，方便解释为什么需要这项能力。</dd></div>
+                <div><dt>Neo4j</dt><dd>后续存放岗位、能力点和证据关系的图数据库。</dd></div>
+                <div><dt>API Key</dt><dd>用户自己的模型调用密钥，只在当前浏览器会话中用于分析。</dd></div>
+              </dl>
+              <div class="notice" id="setupNotice">当前可以先查看页面流程；证据服务和分析服务连接后，会展示真实数据结果。</div>
+            </div>
+          </aside>
+
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <h2>页面读法</h2>
+                <small>状态贴对象，结果贴任务</small>
+              </div>
+            </div>
+            <div class="panel-body">
+              <dl class="term-list">
+                <div><dt>状态</dt><dd>每个任务卡右上角显示能否使用或是否等待服务。</dd></div>
+                <div><dt>下一步</dt><dd>只提示当前最应该做的一件事。</dd></div>
+                <div><dt>核心结果</dt><dd>进入模块后会看到的主要业务输出。</dd></div>
+              </dl>
+            </div>
+          </article>
+        </section>
+      </main>
+    ` + closeShell();
+
+    const pageParams = new URLSearchParams(location.search);
+    const localDemo = location.protocol === "file:" || ["127.0.0.1", "localhost"].includes(location.hostname);
+    const graphBase = pageParams.get("graphApi") || (localDemo ? "http://127.0.0.1:8010" : "");
+    const resumeBase = pageParams.get("resumeApi") || (localDemo ? "http://127.0.0.1:8000" : "/resume-api");
+    let radarTimer = 0;
+
+    const stageNames = {
+      standby: "待命", queued: "排队", crawling: "采集 JD", ingesting: "增量入库",
+      filtering: "IT 准入", extracting: "能力分析", mapping: "岗位映射",
+      normalizing: "关系生成", publishing: "发布图谱", discovering: "发现新岗位",
+      completed: "已完成", failed: "未完成",
+    };
+
+    function renderRadar(state) {
+      const active = ["queued", "running"].includes(state.status);
+      const progress = Math.max(0, Math.min(100, Number(state.progress || 0)));
+      $("radarVisual").classList.toggle("is-scanning", active);
+      $("radarVisual").classList.toggle("is-failed", state.status === "failed");
+      $("radarPercent").textContent = `${progress}%`;
+      $("radarProgressBar").style.width = `${progress}%`;
+      $("radarMessage").textContent = state.message || "雷达在线，等待启动监测";
+      $("radarStage").textContent = stageNames[state.stage] || state.stage || "待命";
+      $("startRadar").disabled = active;
+      $("startRadar").textContent = active ? "监测进行中…" : $("radarMode").value === "full" ? "启动全量岗位雷达" : "启动一轮监测";
+      $("radarTag").textContent = active ? "动态监测中" : state.status === "completed" ? "本轮完成" : state.status === "failed" ? "需要检查" : "监测待命";
+      $("radarTag").className = `tag ${state.status === "failed" ? "high" : active ? "medium" : "ok"}`;
+      const result = state.result || {};
+      if (state.status === "completed") {
+        $("radarResult").textContent = `本轮新增采集 ${result.rows_added || 0} 条；图谱发布与岗位发现已完成。`;
+        $("radarReviewLink").hidden = false;
+      } else if (state.status === "failed") {
+        $("radarResult").textContent = result.error || "任务失败，请检查爬虫登录态、模型配置或流水线日志。";
+        $("radarReviewLink").hidden = true;
+      } else if (active) {
+        const req = state.request || {};
+        $("radarResult").textContent = `${req.scan_mode_label || "岗位巡检"} · ${req.keyword_count || 0} 个关键词 · ${req.platform_label || "招聘平台"} · 本轮最多 ${req.limit || 0} 条`;
+        $("radarReviewLink").hidden = true;
+      }
+    }
+
+    async function pollRadar() {
+      try {
+        const state = await getJSON(`${graphBase}/api/v1/radar/status`);
+        renderRadar(state);
+        if (["queued", "running"].includes(state.status) && !radarTimer) {
+          radarTimer = window.setInterval(pollRadar, 1200);
+        } else if (!["queued", "running"].includes(state.status) && radarTimer) {
+          clearInterval(radarTimer);
+          radarTimer = 0;
+        }
+      } catch (error) {
+        $("radarMessage").textContent = "图谱服务未连接，暂时无法启动监测";
+        $("radarResult").textContent = error.message;
+        $("startRadar").disabled = true;
+        $("radarTag").textContent = "服务离线";
+        $("radarTag").className = "tag high";
+      }
+    }
+
+    async function startRadar() {
+      $("startRadar").disabled = true;
+      $("radarMessage").textContent = "正在创建限量采集任务…";
+      try {
+        const state = await postJSON(`${graphBase}/api/v1/radar/runs`, {
+          platform: $("radarPlatform").value,
+          limit: Number($("radarLimit").value),
+          pages: Number($("radarPages").value),
+          scan_mode: $("radarMode").value,
+          keyword: $("radarKeyword").value,
+        });
+        renderRadar(state);
+        if (!radarTimer) radarTimer = window.setInterval(pollRadar, 1200);
+      } catch (error) {
+        $("radarMessage").textContent = `启动失败：${error.message}`;
+        $("startRadar").disabled = false;
+      }
+    }
+
+    function updateRadarMode() {
+      const mode = $("radarMode").value;
+      $("radarKeywordField").hidden = mode !== "target";
+      $("startRadar").textContent = mode === "full" ? "启动全量岗位雷达" : "启动一轮监测";
+      const count = mode === "full" ? 73 : mode === "quick" ? 12 : 1;
+      $("radarResult").textContent = mode === "target"
+        ? "从统一关键词池选择一个岗位进行定向检查。"
+        : `${count} 个岗位关键词 × 北上广深；达到本轮 JD 上限后停止继续遍历。`;
+    }
+
+    async function loadRadarConfig() {
+      try {
+        const config = await getJSON(`${graphBase}/api/v1/radar/config`);
+        $("radarKeyword").innerHTML = (config.full_keywords || []).map((keyword) => `<option>${esc(keyword)}</option>`).join("");
+        const fullCount = (config.full_keywords || []).length;
+        const quickCount = (config.quick_keywords || []).length;
+        $("radarMode").options[0].textContent = `全量关键词池（${fullCount}）`;
+        $("radarMode").options[1].textContent = `快速抽样（${quickCount}）`;
+        updateRadarMode();
+      } catch {
+        $("radarKeyword").innerHTML = `<option>产品经理</option>`;
+      }
+    }
+
+    async function checkServices() {
+      setStatus("pageStatus", "正在检测本地服务", "warn");
+      const graph = await ping(`${graphBase}/api/health`);
+      const resume = await ping(`${resumeBase}/health`);
+      writeTaskStatus("graph", graph, "证据服务在线", "证据服务未连接", "连接后可查看 JD 原文回标");
+      writeTaskStatus("resume", resume, "分析服务在线", "分析服务未连接", "连接后可上传简历并匹配岗位");
+      const okCount = Number(graph.ok) + Number(resume.ok);
+      $("setupNotice").textContent = okCount
+        ? "已检测到服务在线。进入对应页面后可以验证真实数据结果。"
+        : "当前可以先查看页面流程；服务未连接时不会写入或生成真实结果。";
+      setStatus("pageStatus", okCount ? `${okCount} 个可选服务在线` : "前端预览就绪", "ok");
+    }
+
+    function writeTaskStatus(prefix, result, onlineText, offlineText, offlineHint) {
+      $(`${prefix}Service`).textContent = result.ok ? onlineText : offlineText;
+      $(`${prefix}Hint`).textContent = result.ok ? result.text : offlineHint;
+      const tag = $(`${prefix}TaskTag`);
+      tag.textContent = result.ok ? "在线" : "可选";
+      tag.className = result.ok ? "tag ok" : "tag medium";
+    }
+
+    async function ping(url) {
+      try {
+        const data = await getJSON(url);
+        const jds = data.counts?.jds ?? data.roles_available ?? data.status ?? "已响应";
+        return { ok: true, text: String(jds) };
+      } catch {
+        return { ok: false, text: "" };
+      }
+    }
+
+    $("refreshStatus").onclick = checkServices;
+    $("startRadar").onclick = startRadar;
+    $("radarMode").onchange = updateRadarMode;
+    loadRadarConfig();
+    pollRadar();
+    checkServices();
+  </script>
+</body>
+</html>

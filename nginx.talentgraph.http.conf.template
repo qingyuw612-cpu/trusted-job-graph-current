@@ -1,0 +1,17 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${TG_DOMAIN};
+    client_max_body_size 10m;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy same-origin always;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/acme;
+        default_type "text/plain";
+        try_files $uri =404;
+    }
+    location ^~ /api/v1/evolution/ { proxy_pass http://127.0.0.1:8070; proxy_buffering off; add_header Cache-Control "no-store" always; access_log off; }
+    location ^~ /api/v1/resume/ { proxy_pass http://127.0.0.1:8000/; add_header Cache-Control "no-store" always; access_log off; }
+    location ^~ /api/ { proxy_pass http://127.0.0.1:8010; proxy_buffering off; add_header Cache-Control "no-store" always; access_log off; }
+    location / { proxy_pass http://127.0.0.1:8090; }
+}

@@ -20,6 +20,20 @@ python job_crawler_runner.py run --keyword 产品经理 --city 北京 --pages 1 
 python job_crawler_runner.py run --keyword 产品经理 --city 北京 --pages 1
 ```
 
+统一关键词池巡检（73 个岗位关键词、北上广深，每个平台新增 JD 达到 300 条后停止继续遍历）：
+
+```powershell
+python job_crawler_runner.py run --scan-mode full --pages 1 --collection-limit 300
+```
+
+快速抽样巡检使用关键词池中的 12 个代表岗位：
+
+```powershell
+python job_crawler_runner.py run --scan-mode quick --pages 1 --collection-limit 100
+```
+
+`--scan-mode target` 必须与 `--keyword` 一起使用，且关键词必须来自 `config/job_radar_keywords.json`。旧命令不传 `--scan-mode` 时保持原有行为。
+
 全量每 12 小时重扫一次：
 
 ```powershell
@@ -31,6 +45,31 @@ python job_crawler_runner.py schedule --interval-minutes 720
 ```powershell
 python job_crawler_runner.py schedule --interval-minutes 720 --system-import --system-publish
 ```
+
+## 生产环境持续运行
+
+生产安装器会创建 `talentgraph-crawler.service` 和
+`talentgraph-crawler.timer`。默认在开机 15 分钟后执行第一轮，此后每 12
+小时执行一轮；每轮使用 73 个岗位关键词、北上广深、每个关键词/城市 3
+页，并在每个平台新增 1000 条 JD 后停止。三个平台理论单轮上限为 3000
+条原始新增 JD，实际入图数会在去重、IT 准入、证据验证后下降。
+
+定时任务执行完整的“采集 → 原始归档 → 去重/版本化 → IT 准入 → 五维能力
+提取 → 证据校验 → 增量归一化 → 发布 → 岗位变化发现”，任一关键阶段
+失败均不会切换活动图谱。它与每周全量校准共用维护锁，不会并发写图谱。
+
+```bash
+sudo systemctl status talentgraph-crawler.timer
+sudo systemctl list-timers talentgraph-crawler.timer talentgraph-full-normalization.timer
+sudo systemctl start talentgraph-crawler.service  # 立即手动执行一轮
+sudo journalctl -u talentgraph-crawler.service -n 100 --no-pager
+```
+
+安装前可通过环境变量调整 `TG_CRAWLER_INTERVAL`、
+`TG_CRAWLER_PAGES`、`TG_CRAWLER_COLLECTION_LIMIT` 等参数；推荐先保持默认
+的每 12 小时、每平台 1000 条上限，观察两周的新增率和平台限流情况后再
+增加。自动发布必须配置 `IFLYTEK_SPARK_API_PASSWORD`，缺少密钥时任务会
+明确失败并保留原活动图谱，不会积压未经处理的数据。
 
 将已有三个 CSV 直接接入系统，不重新爬取：
 
@@ -44,7 +83,7 @@ python job_crawler_runner.py run --reuse-output --system-import --system-publish
 
 ```powershell
 $env:IFLYTEK_SPARK_API_PASSWORD = "控制台中的 APIPassword"
-$env:IFLYTEK_SPARK_MODEL = "该 APIPassword 对应的模型 ID"
+$env:IFLYTEK_SPARK_MODEL = "lite"
 $env:IFLYTEK_SPARK_BASE_URL = "https://spark-api-open.xf-yun.com/v1"
 ```
 

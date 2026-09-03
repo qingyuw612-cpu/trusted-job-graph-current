@@ -19,7 +19,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Iterable
-from http.client import HTTPException
+from http.client import HTTPException, RemoteDisconnected
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -147,19 +147,54 @@ def validate_result(payload: Any, evidence_text: str) -> dict[str, list[str]]:
     return result
 
 
+def _repair_json_escapes(text: str) -> str:
+    """Repair the common Lite error of emitting an invalid backslash escape."""
+    repaired: list[str] = []
+    index = 0
+    in_string = False
+    while index < len(text):
+        character = text[index]
+        if character == '"':
+            escaped = index > 0 and text[index - 1] == "\\"
+            if not escaped:
+                in_string = not in_string
+            repaired.append(character)
+            index += 1
+            continue
+        if character == "\\" and in_string:
+            next_character = text[index + 1] if index + 1 < len(text) else ""
+            valid_escape = next_character in {'"', "\\", "/", "b", "f", "n", "r", "t"}
+            valid_unicode = next_character == "u" and bool(
+                re.match(r"^[0-9a-fA-F]{4}$", text[index + 2 : index + 6])
+            )
+            if not valid_escape and not valid_unicode:
+                repaired.append("\\\\")
+                index += 1
+                continue
+        repaired.append(character)
+        index += 1
+    return "".join(repaired)
+
+
 def extract_json_object(text: str) -> dict[str, Any]:
     cleaned = text.strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"\s*```$", "", cleaned)
-    try:
-        value = json.loads(cleaned)
-    except json.JSONDecodeError:
-        start = cleaned.find("{")
-        end = cleaned.rfind("}")
-        if start < 0 or end <= start:
-            raise ValueError("模型响应中没有 JSON 对象。")
-        value = json.loads(cleaned[start : end + 1])
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("模型响应中没有 JSON 对象。")
+    candidate = cleaned[start : end + 1]
+    errors: list[Exception] = []
+    for payload in (candidate, _repair_json_escapes(candidate)):
+        try:
+            value = json.loads(payload)
+            break
+        except json.JSONDecodeError as error:
+            errors.append(error)
+    else:
+        raise ValueError(f"模型响应 JSON 无法解析：{errors[-1]}") from errors[-1]
     if not isinstance(value, dict):
         raise ValueError("模型响应 JSON 不是对象。")
     return value
@@ -251,6 +286,8 @@ class OpenAICompatibleClient:
                 URLError,
                 HTTPException,
                 ConnectionError,
+                RemoteDisconnected,
+                OSError,
                 TimeoutError,
                 KeyError,
                 IndexError,

@@ -1,0 +1,270 @@
+{
+  "role_name": "Java开发工程师",
+  "match": {
+    "verdict": "no",
+    "reason": "虽然候选人在Java后端开发方面有扎实的基础，但缺少微服务、MyBatis、Linux、Docker等关键技能，且学历和动机、特质等维度存在明显缺口，目前不完全匹配目标岗位。"
+  },
+  "dimensions": {
+    "knowledge": {
+      "score": 0.5,
+      "gap_level": "partial",
+      "summary": "具备后端知识，但缺少微服务相关知识，需要补充。",
+      "hit": [
+        "后端"
+      ],
+      "missing": [
+        "微服务"
+      ]
+    },
+    "skill": {
+      "score": 0.4286,
+      "gap_level": "partial",
+      "summary": "掌握Java、Spring Boot、MySQL等核心技能，但缺少MyBatis、Linux、Docker、Kafka等多项关键技能，技能覆盖不完整。",
+      "hit": [
+        "Java",
+        "Spring Boot",
+        "MySQL",
+        "Redis",
+        "SQL",
+        "Git",
+        "数据库设计",
+        "Vue",
+        "Python"
+      ],
+      "missing": [
+        "MyBatis",
+        "Linux",
+        "需求分析",
+        "Kafka",
+        "Oracle",
+        "Docker",
+        "系统设计",
+        "性能优化",
+        "单元测试",
+        "RabbitMQ",
+        "Kubernetes",
+        "JavaScript"
+      ]
+    },
+    "qualifications": {
+      "score": 0.0,
+      "gap_level": "sufficient",
+      "summary": "本科学历和计算机专业均满足要求。",
+      "hit": [],
+      "missing": [
+        "本科及以上学历",
+        "计算机相关专业"
+      ]
+    },
+    "preference": {
+      "score": 0.0,
+      "gap_level": "sufficient",
+      "summary": "无额外偏好要求，满足。",
+      "hit": [],
+      "missing": []
+    },
+    "motivation": {
+      "score": 0.0,
+      "gap_level": "missing",
+      "summary": "简历中未体现学习能力，需要补充相关证据。",
+      "hit": [],
+      "missing": [
+        "学习能力"
+      ]
+    },
+    "trait": {
+      "score": 0.0,
+      "gap_level": "missing",
+      "summary": "简历中未体现团队协作、沟通能力和逻辑思维，需要补充相关经历。",
+      "hit": [],
+      "missing": [
+        "团队协作",
+        "沟通能力",
+        "逻辑思维"
+      ]
+    },
+    "self_concept": {
+      "score": 0.0,
+      "gap_level": "missing",
+      "summary": "简历中未体现责任心，需要补充相关描述。",
+      "hit": [],
+      "missing": [
+        "责任心"
+      ]
+    }
+  },
+  "missing_skills": [
+    {
+      "skill": "MyBatis",
+      "dim": "skill",
+      "importance": "high"
+    },
+    {
+      "skill": "Linux",
+      "dim": "skill",
+      "importance": "high"
+    },
+    {
+      "skill": "Docker",
+      "dim": "skill",
+      "importance": "high"
+    },
+    {
+      "skill": "微服务",
+      "dim": "knowledge",
+      "importance": "high"
+    },
+    {
+      "skill": "系统设计",
+      "dim": "skill",
+      "importance": "high"
+    },
+    {
+      "skill": "性能优化",
+      "dim": "skill",
+      "importance": "medium"
+    },
+    {
+      "skill": "单元测试",
+      "dim": "skill",
+      "importance": "medium"
+    },
+    {
+      "skill": "Kafka",
+      "dim": "skill",
+      "importance": "medium"
+    },
+    {
+      "skill": "RabbitMQ",
+      "dim": "skill",
+      "importance": "medium"
+    },
+    {
+      "skill": "Kubernetes",
+      "dim": "skill",
+      "importance": "medium"
+    },
+    {
+      "skill": "Oracle",
+      "dim": "skill",
+      "importance": "low"
+    },
+    {
+      "skill": "JavaScript",
+      "dim": "skill",
+      "importance": "low"
+    },
+    {
+      "skill": "需求分析",
+      "dim": "skill",
+      "importance": "low"
+    }
+  ],
+  "learning_path": [
+    {
+      "step": 1,
+      "skill": "MyBatis",
+      "importance": "high",
+      "prerequisite": "Java基础、Spring Boot基础",
+      "resources": [
+        "MyBatis官方文档",
+        "《MyBatis从入门到精通》",
+        "B站MyBatis教程"
+      ],
+      "estimated_effort": "1-2周",
+      "why": "MyBatis是Java后端开发中最常用的持久层框架，与Spring Boot集成紧密，是岗位必备技能，优先学习。"
+    },
+    {
+      "step": 2,
+      "skill": "Linux",
+      "importance": "high",
+      "prerequisite": "计算机基础",
+      "resources": [
+        "《鸟哥的Linux私房菜》",
+        "Linux命令行大全",
+        "实验楼Linux课程"
+      ],
+      "estimated_effort": "2-3周",
+      "why": "Linux是服务器端开发部署的基础环境，掌握常用命令和Shell脚本是必备技能。"
+    },
+    {
+      "step": 3,
+      "skill": "Docker",
+      "importance": "high",
+      "prerequisite": "Linux基础",
+      "resources": [
+        "Docker官方文档",
+        "《Docker实战》",
+        "B站Docker教程"
+      ],
+      "estimated_effort": "1-2周",
+      "why": "Docker是容器化部署的核心工具，现代Java开发中广泛使用，学习Docker可以提升部署效率。"
+    },
+    {
+      "step": 4,
+      "skill": "微服务",
+      "importance": "high",
+      "prerequisite": "Spring Boot、分布式基础",
+      "resources": [
+        "《微服务架构设计模式》",
+        "Spring Cloud官方文档",
+        "极客时间微服务课程"
+      ],
+      "estimated_effort": "3-4周",
+      "why": "微服务是大型系统的主流架构，岗位明确要求，需要系统学习Spring Cloud等微服务框架。"
+    },
+    {
+      "step": 5,
+      "skill": "系统设计",
+      "importance": "high",
+      "prerequisite": "分布式基础、微服务知识",
+      "resources": [
+        "《系统设计面试》",
+        "Grokking System Design",
+        "系统设计入门教程"
+      ],
+      "estimated_effort": "3-4周",
+      "why": "系统设计能力是高级开发者的核心能力，也是面试重点，需要掌握高并发、高可用设计。"
+    },
+    {
+      "step": 6,
+      "skill": "性能优化",
+      "importance": "medium",
+      "prerequisite": "MySQL、Redis、JVM知识",
+      "resources": [
+        "《Java性能优化权威指南》",
+        "MySQL性能调优与架构设计",
+        "JVM性能优化实战"
+      ],
+      "estimated_effort": "2-3周",
+      "why": "性能优化是后端开发的重要技能，涉及数据库、缓存、JVM等多个方面，提升系统响应能力。"
+    },
+    {
+      "step": 7,
+      "skill": "单元测试",
+      "importance": "medium",
+      "prerequisite": "Java基础、JUnit",
+      "resources": [
+        "JUnit官方文档",
+        "《单元测试之道》",
+        "Mockito教程"
+      ],
+      "estimated_effort": "1周",
+      "why": "单元测试是保证代码质量的重要手段，也是团队协作的基础，需要掌握JUnit和Mockito。"
+    },
+    {
+      "step": 8,
+      "skill": "消息队列（Kafka/RabbitMQ）",
+      "importance": "medium",
+      "prerequisite": "分布式基础",
+      "resources": [
+        "Kafka官方文档",
+        "RabbitMQ官方文档",
+        "《Kafka权威指南》"
+      ],
+      "estimated_effort": "2-3周",
+      "why": "消息队列是微服务异步通信的核心组件，掌握Kafka或RabbitMQ可以提升系统解耦能力。"
+    }
+  ],
+  "overall_advice": "候选人具备良好的Java后端基础，但缺少多项关键技能，且动机、特质、自我概念等维度需要加强。建议通过系统学习和项目实践补齐技能短板，并在简历中突出软实力。"
+}

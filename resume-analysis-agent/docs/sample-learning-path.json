@@ -1,0 +1,109 @@
+{
+  "learning_path": [
+    {
+      "step": 1,
+      "skill": "MyBatis",
+      "importance": "high",
+      "prerequisite": "Java基础、Spring Boot基础",
+      "resources": [
+        "MyBatis官方文档",
+        "《MyBatis从入门到精通》",
+        "B站MyBatis教程"
+      ],
+      "estimated_effort": "1-2周",
+      "why": "MyBatis是Java后端开发中最常用的持久层框架，与Spring Boot集成紧密，是岗位必备技能，优先学习。"
+    },
+    {
+      "step": 2,
+      "skill": "Linux",
+      "importance": "high",
+      "prerequisite": "计算机基础",
+      "resources": [
+        "《鸟哥的Linux私房菜》",
+        "Linux命令行大全",
+        "实验楼Linux课程"
+      ],
+      "estimated_effort": "2-3周",
+      "why": "Linux是服务器端开发部署的基础环境，掌握常用命令和Shell脚本是必备技能。"
+    },
+    {
+      "step": 3,
+      "skill": "Docker",
+      "importance": "high",
+      "prerequisite": "Linux基础",
+      "resources": [
+        "Docker官方文档",
+        "《Docker实战》",
+        "B站Docker教程"
+      ],
+      "estimated_effort": "1-2周",
+      "why": "Docker是容器化部署的核心工具，现代Java开发中广泛使用，学习Docker可以提升部署效率。"
+    },
+    {
+      "step": 4,
+      "skill": "微服务",
+      "importance": "high",
+      "prerequisite": "Spring Boot、分布式基础",
+      "resources": [
+        "《微服务架构设计模式》",
+        "Spring Cloud官方文档",
+        "极客时间微服务课程"
+      ],
+      "estimated_effort": "3-4周",
+      "why": "微服务是大型系统的主流架构，岗位明确要求，需要系统学习Spring Cloud等微服务框架。"
+    },
+    {
+      "step": 5,
+      "skill": "系统设计",
+      "importance": "high",
+      "prerequisite": "分布式基础、微服务知识",
+      "resources": [
+        "《系统设计面试》",
+        "Grokking System Design",
+        "系统设计入门教程"
+      ],
+      "estimated_effort": "3-4周",
+      "why": "系统设计能力是高级开发者的核心能力，也是面试重点，需要掌握高并发、高可用设计。"
+    },
+    {
+      "step": 6,
+      "skill": "性能优化",
+      "importance": "medium",
+      "prerequisite": "MySQL、Redis、JVM知识",
+      "resources": [
+        "《Java性能优化权威指南》",
+        "MySQL性能调优与架构设计",
+        "JVM性能优化实战"
+      ],
+      "estimated_effort": "2-3周",
+      "why": "性能优化是后端开发的重要技能，涉及数据库、缓存、JVM等多个方面，提升系统响应能力。"
+    },
+    {
+      "step": 7,
+      "skill": "单元测试",
+      "importance": "medium",
+      "prerequisite": "Java基础、JUnit",
+      "resources": [
+        "JUnit官方文档",
+        "《单元测试之道》",
+        "Mockito教程"
+      ],
+      "estimated_effort": "1周",
+      "why": "单元测试是保证代码质量的重要手段，也是团队协作的基础，需要掌握JUnit和Mockito。"
+    },
+    {
+      "step": 8,
+      "skill": "消息队列（Kafka/RabbitMQ）",
+      "importance": "medium",
+      "prerequisite": "分布式基础",
+      "resources": [
+        "Kafka官方文档",
+        "RabbitMQ官方文档",
+        "《Kafka权威指南》"
+      ],
+      "estimated_effort": "2-3周",
+      "why": "消息队列是微服务异步通信的核心组件，掌握Kafka或RabbitMQ可以提升系统解耦能力。"
+    }
+  ],
+  "_note": "B3 契约字段：step / skill / importance / prerequisite / resources / estimated_effort / why"
+}

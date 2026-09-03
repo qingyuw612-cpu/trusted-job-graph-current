@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>知途 talentgraph · 人岗匹配</title>
+  <link rel="stylesheet" href="assets/ui.css?v=closed-loop-20260902-action-column1">
+</head>
+<body>
+  <div class="app-shell" id="shell"></div>
+  <script src="assets/ui.js?v=closed-loop-20260901-resume-markdown1"></script>
+  <script>
+    const localDemo = location.protocol === "file:" || ["127.0.0.1", "localhost"].includes(location.hostname);
+    // Production is same-origin under /api/v1/resume; local development uses
+    // the fixed 8000 port. Do not accept API URL query overrides.
+    const RESUME_API_BASE = localDemo ? "http://127.0.0.1:8000" : "/api/v1/resume";
+    let resumeText = "";
+    let rankResult = null;
+    let selectedRole = null;
+    ["resumeLlmProvider", "resumeLlmApiKey", "resumeLlmModel", "resumeLlmBaseUrl"]
+      .forEach((key) => sessionStorage.removeItem(key));
+
+    $("shell").innerHTML = navShell(
+      "resume",
+      "人岗差距分析",
+      "上传简历，看看适合哪些岗位，以及下一步补什么能力。"
+    ) + `
+      <main id="mainContent" class="page page-grid">
+        <section class="panel setup-panel">
+          <div class="panel-head">
+            <div class="panel-title">
+              <h2>上传简历</h2>
+              <small>支持 PDF、Word、Markdown 和文本简历</small>
+            </div>
+            <div class="actions">
+              <button id="health" type="button">刷新状态</button>
+            </div>
+          </div>
+          <div class="toolbar match-toolbar">
+            <div class="wide">
+              <label for="resumeFile">选择简历</label>
+              <input id="resumeFile" class="resume-file-input" type="file" accept=".pdf,.docx,.md,.txt">
+              <div class="resume-file-picker">
+                <span class="resume-file-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path d="M14 3.5H7.5A2.5 2.5 0 0 0 5 6v12a2.5 2.5 0 0 0 2.5 2.5h9A2.5 2.5 0 0 0 19 18V8.5L14 3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M14 3.5v5h5M12 17v-5m0 0-2 2m2-2 2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+                <label class="resume-file-copy" for="resumeFile">
+                  <b id="resumeFileName">点击选择简历文件</b>
+                  <small>支持 PDF、DOCX、Markdown、TXT</small>
+                </label>
+                <button id="loadSample" class="resume-sample-action" type="button">一键使用示例</button>
+                <label class="resume-file-action" for="resumeFile">浏览文件</label>
+              </div>
+            </div>
+            <div>
+              <label for="topk">查看岗位数</label>
+              <input id="topk" class="num" type="number" min="1" max="20" value="8">
+            </div>
+            <div class="wide">
+              <label>简历状态</label>
+              <div class="upload-state">
+                <span id="uploadState" class="truncate">尚未上传简历</span>
+                <span id="resumeChars" class="tag">0 字</span>
+              </div>
+            </div>
+            <div class="actions right">
+              <button id="rank" class="primary" type="button">开始匹配</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="resume-workspace">
+          <section class="panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <h2>匹配岗位</h2>
+                <small>先选一个目标岗位，再查看你的能力差距</small>
+              </div>
+              <span id="rankCount" class="badge">0 个岗位</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>岗位</th>
+                    <th>方向</th>
+                    <th class="num">匹配度</th>
+                    <th class="num">符合项</th>
+                    <th class="num">覆盖程度</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="rankRows">
+                  <tr><td colspan="6">${emptyState("上传简历并点击“开始匹配”，这里会显示适合你的岗位")}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <aside class="detail-stack">
+            <section class="panel">
+              <div class="panel-head">
+                <div class="panel-title">
+                  <h2 id="selectedRoleName">先选择一个岗位</h2>
+                  <small id="selectedRoleMeta">选中后查看匹配详情</small>
+                </div>
+              </div>
+              <div class="panel-body detail-stack">
+                <div class="notice" id="algorithmNote">匹配结果会综合技能相关性和岗位要求，帮助你判断下一步。</div>
+                <div class="metric-grid">
+                  <div class="metric"><span>匹配得分</span><strong id="roleScore" class="num">0.0</strong></div>
+                  <div class="metric"><span>符合能力</span><strong id="hitSkills" class="num">0</strong></div>
+                  <div class="metric"><span>岗位能力</span><strong id="totalSkills" class="num">0</strong></div>
+                  <div class="metric"><span>匹配覆盖</span><strong id="coverage" class="num">0.0%</strong></div>
+                </div>
+                <div class="actions right">
+                  <button id="runGap" type="button" disabled>查看能力差距</button>
+                  <button id="runModify" class="primary" type="button" disabled>优化简历表达</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel analysis-panel">
+              <div class="panel-head">
+                <div class="panel-title">
+                  <h2>你的能力差距</h2>
+                  <small>清楚看到缺什么、差多少、先补什么</small>
+                </div>
+                <span id="analysisState" class="tag">等待分析</span>
+              </div>
+              <div id="analysisOutput" class="panel-body">
+                ${emptyState("完成匹配并选择目标岗位后，点击“查看能力差距”。")}
+              </div>
+            </section>
+          </aside>
+        </section>
+      </main>
+    ` + closeShell();
+
+    async function checkHealth() {
+      try {
+        setStatus("pageStatus", "正在准备匹配功能", "warn");
+        const health = await getJSON(`${RESUME_API_BASE}/health`);
+        const roles = health.roles_available ?? 0;
+        setStatus("pageStatus", `服务在线 · ${fmtNumber(roles)} 个可匹配岗位`, "ok");
+      } catch {
+        setStatus("pageStatus", "匹配功能暂不可用", "error");
+      }
+    }
+
+    async function uploadResume() {
+      const file = $("resumeFile").files[0];
+      if (!file) {
+        setStatus("pageStatus", "请先选择简历文件", "warn");
+        return false;
+      }
+      try {
+        setStatus("pageStatus", "正在解析简历文件", "warn");
+        const data = await postFile(`${RESUME_API_BASE}/upload`, file);
+        resumeText = data.text || "";
+        $("uploadState").textContent = data.filename || file.name;
+        $("resumeChars").textContent = `${fmtNumber(resumeText.length)} 字`;
+        updateActionStates();
+        setStatus("pageStatus", `已解析 ${data.filename || file.name}`, "ok");
+        return true;
+      } catch (error) {
+        setStatus("pageStatus", error.message, "error");
+        return false;
+      }
+    }
+
+    async function ensureResumeText() {
+      if (resumeText.trim()) return true;
+      return uploadResume();
+    }
+
+    async function loadSampleResume() {
+      const button = $("loadSample");
+      button.disabled = true;
+      try {
+        setStatus("pageStatus", "正在载入示例简历", "warn");
+        const response = await request("assets/sample-resume.md?v=20260902-demo1");
+        if (!response.ok) throw new Error("示例简历加载失败");
+        resumeText = await response.text();
+        $("resumeFile").value = "";
+        $("resumeFileName").textContent = "示例简历 · AI 应用开发工程师";
+        $("resumeFileName").closest(".resume-file-picker").classList.add("has-file");
+        $("uploadState").textContent = "已载入系统示例简历";
+        $("resumeChars").textContent = `${fmtNumber(resumeText.length)} 字`;
+        selectedRole = null;
+        rankResult = null;
+        renderSelectedRole();
+        resetAnalysis("示例简历已载入，正在计算岗位匹配。 ");
+        updateActionStates();
+        await rankResume();
+      } catch (error) {
+        setStatus("pageStatus", error.message, "error");
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function rankResume() {
+      if (!await ensureResumeText()) return;
+      try {
+        setStatus("pageStatus", "正在计算岗位匹配", "warn");
+        rankResult = await postJSON(`${RESUME_API_BASE}/rank`, {
+          resume_text: resumeText,
+          topk: Number($("topk").value || 8),
+        });
+        selectedRole = rankResult.results?.[0] || null;
+        renderRankRows();
+        renderSelectedRole();
+        resetAnalysis("已找到匹配岗位。请选择一个目标岗位，再查看能力差距。");
+        updateActionStates();
+        const algorithm = rankResult.algorithm || {};
+        $("algorithmNote").textContent = "匹配结果已结合岗位要求和技能相关性，可作为选择方向的参考。";
+        setStatus("pageStatus", `匹配完成 · ${fmtNumber(rankResult.count || 0)} 个岗位`, "ok");
+      } catch (error) {
+        setStatus("pageStatus", error.message, "error");
+      }
+    }
+
+    function renderRankRows() {
+      const results = rankResult?.results || [];
+      $("rankCount").textContent = `${results.length} 个岗位`;
+      $("rankRows").innerHTML = results.length ? results.map((role, index) => {
+        const total = Number(role.total_skills || 0);
+        const hit = Number(role.hit_skills || 0);
+        const coverage = total ? hit / total : 0;
+        return `
+          <tr class="${role === selectedRole ? "is-selected" : ""}" data-index="${index}">
+            <td><b>${esc(role.role_name)}</b><div class="muted small truncate">${esc(role.domain_name || "领域未注明")}</div></td>
+            <td>${esc(role.family_name || "未分组")}</td>
+            <td class="num">${fmtNumber(role.score, 4)}</td>
+            <td class="num">${fmtNumber(hit)} / ${fmtNumber(total)}</td>
+            <td class="num">${fmtPercent(coverage, 1)}</td>
+            <td><button class="table-action" type="button" data-index="${index}" aria-pressed="${role === selectedRole}">${role === selectedRole ? "已选" : "选择"}</button></td>
+          </tr>
+        `;
+      }).join("") : `<tr><td colspan="6">${emptyState("当前简历没有匹配到岗位")}</td></tr>`;
+      $("rankRows").querySelectorAll("button[data-index]").forEach((button) => {
+        button.onclick = () => {
+          selectedRole = results[Number(button.dataset.index)];
+          renderRankRows();
+          renderSelectedRole();
+          resetAnalysis("已切换目标岗位，请重新查看能力差距。");
+        };
+      });
+    }
+
+    function renderSelectedRole() {
+      const role = selectedRole;
+      if (!role) {
+        $("selectedRoleName").textContent = "先选择一个岗位";
+        $("selectedRoleMeta").textContent = "选中后查看匹配详情";
+        $("roleScore").textContent = "0.0";
+        $("hitSkills").textContent = "0";
+        $("totalSkills").textContent = "0";
+        $("coverage").textContent = "0.0%";
+        updateActionStates();
+        return;
+      }
+      const total = Number(role.total_skills || 0);
+      const hit = Number(role.hit_skills || 0);
+      $("selectedRoleName").textContent = role.role_name;
+      $("selectedRoleMeta").textContent = `${role.family_name || "未分组"} / ${role.domain_name || "领域未注明"}`;
+      $("roleScore").textContent = fmtNumber(role.score, 4);
+      $("hitSkills").textContent = fmtNumber(hit);
+      $("totalSkills").textContent = fmtNumber(total);
+      $("coverage").textContent = fmtPercent(total ? hit / total : 0, 1);
+      updateActionStates();
+    }
+
+    function updateActionStates() {
+      const hasResume = Boolean(resumeText.trim());
+      const hasRole = Boolean(selectedRole);
+      const canAnalyze = hasResume && hasRole;
+      const reason = !hasResume ? "请先上传简历" : !hasRole ? "请先选择目标岗位" : "";
+      $("runGap").disabled = !canAnalyze;
+      $("runModify").disabled = !canAnalyze;
+      $("runGap").title = reason;
+      $("runModify").title = reason;
+    }
+
+    async function runGap() {
+      if (!selectedRole || !resumeText) {
+        setStatus("pageStatus", "请先完成匹配并选择岗位", "warn");
+        return;
+      }
+      try {
+        setStatus("pageStatus", "正在整理你的能力差距", "warn");
+        $("analysisState").textContent = "分析中";
+        const data = await postJSON(`${RESUME_API_BASE}/gap`, {
+          role: selectedRole,
+          resume_text: resumeText,
+        }, 120000);
+        renderGap(data.report || data);
+        setStatus("pageStatus", "能力差距已生成", "ok");
+      } catch (error) {
+        setStatus("pageStatus", error.message, "error");
+        $("analysisState").textContent = "生成失败";
+        $("analysisOutput").innerHTML = `<div class="notice" style="border-color:#fecaca;background:var(--danger-weak);color:var(--danger)">${esc(error.message)}</div>`;
+      }
+    }
+
+    async function runModify() {
+      if (!selectedRole || !resumeText) {
+        setStatus("pageStatus", "请先完成匹配并选择岗位", "warn");
+        return;
+      }
+      try {
+        setStatus("pageStatus", "正在优化简历表达", "warn");
+        $("analysisState").textContent = "优化中";
+        const data = await postJSON(`${RESUME_API_BASE}/modify`, {
+          role: selectedRole,
+          resume_text: resumeText,
+        }, 120000);
+        renderModify(data);
+        setStatus("pageStatus", "简历优化建议已生成", "ok");
+      } catch (error) {
+        setStatus("pageStatus", error.message, "error");
+        $("analysisState").textContent = "生成失败";
+        $("analysisOutput").innerHTML = `<div class="notice" style="border-color:#fecaca;background:var(--danger-weak);color:var(--danger)">${esc(error.message)}</div>`;
+      }
+    }
+
+    function renderGap(report) {
+      const dimensions = report.dimensions || {};
+      const missing = collectMissing(report);
+      const path = report.learning_path || [];
+      const dimensionRows = Object.entries(dimensions);
+      const avgScore = dimensionRows.length
+        ? dimensionRows.reduce((sum, [, dim]) => sum + Number(dim.score || 0), 0) / dimensionRows.length
+        : 0;
+      const highCount = missing.filter((item) => priorityClass(item.importance) === "is-high").length;
+      $("analysisState").textContent = "差距分析";
+      $("analysisState").className = "tag ok";
+      $("analysisOutput").innerHTML = `
+        <div class="detail-stack">
+          <div class="result-hero">
+            <div class="result-card"><span>目标岗位</span><strong class="truncate" title="${esc(selectedRole.role_name)}">${esc(selectedRole.role_name)}</strong></div>
+            <div class="result-card"><span>平均覆盖率</span><strong class="num">${fmtPercent(avgScore, 1)}</strong></div>
+            <div class="result-card"><span>技能缺失项</span><strong class="num">${fmtNumber(missing.length)}</strong></div>
+            <div class="result-card"><span>高优先级</span><strong class="num">${fmtNumber(highCount)}</strong></div>
+          </div>
+
+          <div class="notice"><b>匹配结论：</b>${esc(report.match?.reason || report.overall_advice || "暂无结论")}</div>
+
+          <section>
+            <h3 class="section-title">技能缺失项</h3>
+            <div class="gap-grid">
+              ${missing.length ? missing.slice(0, 9).map(renderGapCard).join("") : `<div class="empty">暂无明显缺失技能</div>`}
+            </div>
+          </section>
+
+          <section>
+            <h3 class="section-title">能力覆盖情况</h3>
+            <div class="coverage-list">
+              ${dimensionRows.length ? dimensionRows.map(([key, dim]) => renderCoverageRow(key, dim)).join("") : emptyState("暂无维度数据")}
+            </div>
+          </section>
+
+          <section>
+            <h3 class="section-title">补齐路径</h3>
+            <div class="path-list">
+              ${path.length ? path.map(renderPathItem).join("") : `<div class="empty">暂无学习路径</div>`}
+            </div>
+          </section>
+        </div>
+      `;
+    }
+
+    function renderGapCard(item) {
+      const cls = priorityClass(item.importance);
+      return `
+        <article class="gap-card ${cls}">
+          <h4 class="truncate" title="${esc(item.skill)}">${esc(item.skill)}</h4>
+          <p class="clamp-2">${esc(item.why || "当前简历中缺少可直接支撑该能力的项目或成果描述。")}</p>
+          <div class="gap-meta">
+            <span>${esc(dimName(item.dim))}</span>
+            <span class="tag ${cls === "is-high" ? "high" : cls === "is-medium" ? "medium" : "ok"}">${esc(priorityName(item.importance))}</span>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderCoverageRow(key, dim) {
+      const score = Number(dim.score || 0);
+      const cls = score < 0.45 ? "is-low" : score < 0.72 ? "is-mid" : "";
+      return `
+        <div class="coverage-row ${cls}">
+          <b class="truncate" title="${esc(dimName(key))}">${esc(dimName(key))}</b>
+          <span class="coverage-track"><i style="--w:${Math.max(0, Math.min(score * 100, 100))}%"></i></span>
+          <span class="num">${fmtPercent(score, 0)}</span>
+          <span class="num">${fmtNumber((dim.missing || []).length)} 缺失</span>
+        </div>
+      `;
+    }
+
+    function renderPathItem(item) {
+      return `
+        <article class="path-item">
+          <div>
+            <b>${esc(item.skill || item.title || "待补齐能力")}</b>
+            <span class="muted small">${esc(item.why || item.prerequisite || item.action || "")}</span>
+          </div>
+          <span class="tag ${tagClass(item.importance)}">${esc(item.importance || "medium")}</span>
+        </article>
+      `;
+    }
+
+    function renderMarkdownInline(value) {
+      return esc(value)
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/__([^_]+)__/g, "<strong>$1</strong>")
+        .replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
+    }
+
+    function renderMarkdown(value) {
+      const source = typeof value === "string" ? value : JSON.stringify(value || "", null, 2);
+      const lines = source.replace(/\r\n?/g, "\n").split("\n");
+      const html = [];
+      let listType = "";
+      let inCode = false;
+      let codeLines = [];
+
+      const closeList = () => {
+        if (!listType) return;
+        html.push(`</${listType}>`);
+        listType = "";
+      };
+
+      lines.forEach((line) => {
+        if (/^```/.test(line.trim())) {
+          closeList();
+          if (inCode) {
+            html.push(`<pre><code>${esc(codeLines.join("\n"))}</code></pre>`);
+            codeLines = [];
+          }
+          inCode = !inCode;
+          return;
+        }
+        if (inCode) {
+          codeLines.push(line);
+          return;
+        }
+
+        const heading = line.match(/^(#{1,4})\s+(.+)$/);
+        const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+        const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+        if (heading) {
+          closeList();
+          const level = Math.min(heading[1].length + 1, 5);
+          html.push(`<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`);
+        } else if (unordered || ordered) {
+          const nextType = unordered ? "ul" : "ol";
+          if (listType !== nextType) {
+            closeList();
+            html.push(`<${nextType}>`);
+            listType = nextType;
+          }
+          html.push(`<li>${renderMarkdownInline((unordered || ordered)[1])}</li>`);
+        } else if (/^>\s?/.test(line)) {
+          closeList();
+          html.push(`<blockquote>${renderMarkdownInline(line.replace(/^>\s?/, ""))}</blockquote>`);
+        } else if (!line.trim()) {
+          closeList();
+        } else {
+          closeList();
+          html.push(`<p>${renderMarkdownInline(line)}</p>`);
+        }
+      });
+      closeList();
+      if (inCode && codeLines.length) {
+        html.push(`<pre><code>${esc(codeLines.join("\n"))}</code></pre>`);
+      }
+      return html.join("");
+    }
+
+    function renderModify(data) {
+      $("analysisState").textContent = "简历优化";
+      $("analysisState").className = "tag ok";
+      $("analysisOutput").innerHTML = `
+        <div class="detail-stack">
+          <div class="result-hero modify-summary">
+            <div class="result-card"><span>目标岗位</span><strong class="truncate">${esc(selectedRole.role_name)}</strong></div>
+            <div class="result-card"><span>输出类型</span><strong>简历修改</strong></div>
+          </div>
+          <div class="markdown-box">${renderMarkdown(data.markdown || data.analysis || "暂无修改建议")}</div>
+        </div>
+      `;
+    }
+
+    function collectMissing(report) {
+      if (Array.isArray(report.missing_skills) && report.missing_skills.length) {
+        return report.missing_skills.map((item) => normalizeMissing(item));
+      }
+      return Object.entries(report.dimensions || {}).flatMap(([dim, value]) => (
+        (value.missing || []).map((item) => normalizeMissing(item, dim))
+      ));
+    }
+
+    function normalizeMissing(item, fallbackDim = "") {
+      if (typeof item === "string") return { skill: item, dim: fallbackDim, importance: "medium", why: "" };
+      return {
+        skill: item.skill || item.name || item.skill_name || item.label || "未命名技能",
+        dim: item.dim || item.dimension || fallbackDim,
+        importance: item.importance || item.priority || item.level || "medium",
+        why: item.why || item.reason || item.suggestion || item.description || "",
+      };
+    }
+
+    function priorityClass(value) {
+      const key = String(value || "").toLowerCase();
+      if (key.includes("high") || key.includes("urgent") || key.includes("critical") || key.includes("高")) return "is-high";
+      if (key.includes("medium") || key.includes("中")) return "is-medium";
+      return "";
+    }
+
+    function priorityName(value) {
+      const cls = priorityClass(value);
+      if (cls === "is-high") return "高优先级";
+      if (cls === "is-medium") return "中优先级";
+      return "低优先级";
+    }
+
+    function resetAnalysis(text) {
+      $("analysisState").textContent = "等待分析";
+      $("analysisState").className = "tag";
+      $("analysisOutput").innerHTML = emptyState(text);
+      updateActionStates();
+    }
+
+    function dimName(key) {
+      return {
+        knowledge: "知识",
+        skill: "技术",
+        qualifications: "任职条件",
+        preference: "招聘偏好",
+        motivation: "动机",
+        trait: "特质",
+        self_concept: "自我概念",
+      }[key] || key || "未分组";
+    }
+
+    $("health").onclick = checkHealth;
+    $("loadSample").onclick = loadSampleResume;
+    $("rank").onclick = rankResume;
+    $("runGap").onclick = runGap;
+    $("runModify").onclick = runModify;
+    $("resumeFile").onchange = () => {
+      resumeText = "";
+      selectedRole = null;
+      const filename = $("resumeFile").files[0]?.name || "";
+      $("resumeFileName").textContent = filename || "点击选择简历文件";
+      $("resumeFileName").closest(".resume-file-picker").classList.toggle("has-file", Boolean(filename));
+      $("uploadState").textContent = filename || "尚未上传简历";
+      $("resumeChars").textContent = "待解析";
+      renderSelectedRole();
+      resetAnalysis("文件已选择，点击“开始匹配”会自动解析并计算岗位排名。");
+    };
+    updateActionStates();
+    checkHealth();
+  </script>
+</body>
+</html>

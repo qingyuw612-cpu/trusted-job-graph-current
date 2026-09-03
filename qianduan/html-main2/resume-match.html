@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>简历匹配 · 统一前端</title>
+  <link rel="stylesheet" href="assets/ui.css">
+</head>
+<body>
+  <div class="app-shell" id="shell"></div>
+  <script src="assets/ui.js"></script>
+  <script>
+    const localDemo = location.protocol === "file:" || ["127.0.0.1", "localhost"].includes(location.hostname);
+    const RESUME_API_BASE = new URLSearchParams(location.search).get("resumeApi")
+      || (localDemo ? "http://127.0.0.1:8000" : "/resume-api");
+    let resumeText = "";
+    let rankResult = null;
+    let selectedRole = null;
+    let llmSettings = {
+      provider: "deepseek",
+      api_key: sessionStorage.getItem("resumeLlmApiKey") || "",
+      model: sessionStorage.getItem("resumeLlmModel") || "deepseek-chat",
+      base_url: sessionStorage.getItem("resumeLlmBaseUrl") || "",
+    };
+
+    $("shell").innerHTML = navShell(
+      "resume",
+      "人岗差距分析",
+      "上传简历后完成岗位匹配，并以技能缺失项、维度覆盖率和学习路径呈现分析结果"
+    ) + `
+      <main id="mainContent" class="page page-grid">
+        <section class="panel setup-panel">
+          <div class="panel-head">
+            <div class="panel-title">
+              <h2>匹配配置</h2>
+              <small>选择简历和分析模型后开始匹配</small>
+            </div>
+            <div class="actions">
+              <button id="health" type="button">检查服务</button>
+            </div>
+          </div>
+          <div class="toolbar match-toolbar">
+            <div class="wide">
+              <label for="resumeFile">简历文件</label>
+              <input id="resumeFile" type="file" accept=".pdf,.docx,.md,.txt">
+            </div>
+            <div>
+              <label for="topk">返回岗位数</label>
+              <input id="topk" class="num" type="number" min="1" max="20" value="8">
+            </div>
+            <div>
+              <label for="llmProvider">供应商</label>
+              <select id="llmProvider">
+                <option value="deepseek">DeepSeek</option>
+                <option value="iflytek">讯飞星火</option>
+                <option value="openai">OpenAI</option>
+                <option value="custom">自定义</option>
+              </select>
+            </div>
+            <div class="wide">
+              <label for="llmKey">模型密钥</label>
+              <input id="llmKey" type="password" autocomplete="off" placeholder="输入自己的 API Key">
+            </div>
+            <div>
+              <label for="llmModel">模型</label>
+              <input id="llmModel" type="text" placeholder="deepseek-chat">
+            </div>
+            <div class="wide">
+              <label for="llmBaseUrl">模型服务地址（可选）</label>
+              <input id="llmBaseUrl" type="url" placeholder="留空使用供应商默认地址">
+            </div>
+            <div class="wide">
+              <label>解析状态</label>
+              <div class="upload-state">
+                <span id="uploadState" class="truncate">尚未上传简历</span>
+                <span id="resumeChars" class="tag">0 字</span>
+              </div>
+            </div>
+            <div class="actions right">
+              <button id="rank" class="primary" type="button">开始匹配</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="resume-workspace">
+          <section class="panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <h2>岗位匹配排名</h2>
+                <small>先用粗排结果选择目标岗位，再生成差距分析</small>
+              </div>
+              <span id="rankCount" class="badge">0 个岗位</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>岗位</th>
+                    <th>岗位族</th>
+                    <th class="num">得分</th>
+                    <th class="num">命中</th>
+                    <th class="num">覆盖率</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="rankRows">
+                  <tr><td colspan="6">${emptyState("上传简历并开始匹配后显示结果")}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <aside class="detail-stack">
+            <section class="panel">
+              <div class="panel-head">
+                <div class="panel-title">
+                  <h2 id="selectedRoleName">未选择岗位</h2>
+                  <small id="selectedRoleMeta">从左侧排名表选择一个岗位</small>
+                </div>
+              </div>
+              <div class="panel-body detail-stack">
+                <div class="metric-grid">
+                  <div class="metric"><span>匹配得分</span><strong id="roleScore" class="num">0.0</strong></div>
+                  <div class="metric"><span>命中技能</span><strong id="hitSkills" class="num">0</strong></div>
+                  <div class="metric"><span>总技能</span><strong id="totalSkills" class="num">0</strong></div>
+                  <div class="metric"><span>覆盖率</span><strong id="coverage" class="num">0.0%</strong></div>
+                </div>
+                <div class="actions right">
+                  <button id="runGap" type="button" disabled>生成差距分析</button>
+                  <button id="runModify" class="primary" type="button" disabled>生成修改建议</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel analysis-panel">
+              <div class="panel-head">
+                <div class="panel-title">
+                  <h2>人岗差距分析结果</h2>
+                  <small>技能缺失项、维度覆盖率和学习路径集中展示</small>
+                </div>
+                <span id="analysisState" class="tag">等待分析</span>
+              </div>
+              <div id="analysisOutput" class="panel-body">
+                ${emptyState("完成匹配并选择目标岗位后，点击“生成差距分析”。这里会展示技能缺失项和补齐路径。")}
+              </div>
+            </section>
+          </aside>
+        </section>
+      </main>
+    ` + closeShell();
+
+    async function checkHealth() {
+      try {
+        setStatus("pageStatus", "正在检查简历分析服务", "warn");
+        const health = await getJSON(`${RESUME_API_BASE}/health`);
+        const roles = health.roles_available ?? 0;
+        setStatus("pageStatus", `服务在线 · ${fmtNumber(roles)} 个可匹配岗位`, "ok");
+      } catch {
+        setStatus("pageStatus", "简历分析服务未连接", "error");
+      }
+    }
+
+    async function uploadResume() {
+      const file = $("resumeFile").files[0];
+      if (!file) {
+        setStatus("pageStatus", "请先选择简历文件", "warn");
+        return false;
+      }
+      try {
+        setStatus("pageStatus", "正在解析简历文件", "warn");
+        const data = await postFile(`${RESUME_API_BASE}/upload`, file);
+        resumeText = data.text || "";
+        $("uploadState").textContent = data.filename || file.name;
+        $("resumeChars").textContent = `${fmtNumber(resumeText.length)} 字`;
+        updateActionStates();
+        setStatus("pageStatus", `已解析 ${data.filename || file.name}`, "ok");
+        return true;
+      } catch (error) {
+        setStatus("pageStatus", error.message, "error");
+        return false;
+      }
+    }
+
+    async function ensureResumeText() {
+      if (resumeText.trim()) return true;
+      return uploadResume();
+    }
+
+    async function rankResume() {
+      if (!await ensureResumeText()) return;
+      try {
+        setStatus("pageStatus", "正在计算岗位匹配", "warn");
+        rankResult = await postJSON(`${RESUME_API_BASE}/rank`, {
+          resume_text: resumeText,
+          topk: Number($("topk").value || 8),
+        });
+        selectedRole = rankResult.results?.[0] || null;
+        renderRankRows();
+        renderSelectedRole();
+        resetAnalysis("已完成岗位粗排。请选择一个目标岗位，再生成差距分析。");
+        updateActionStates();
+        setStatus("pageStatus", `匹配完成 · ${fmtNumber(rankResult.count || 0)} 个岗位`, "ok");
+      } catch (error) {
+        setStatus("pageStatus", error.message, "error");
+      }
+    }
+
+    function renderRankRows() {
+      const results = rankResult?.results || [];
+      $("rankCount").textContent = `${results.length} 个岗位`;
+      $("rankRows").innerHTML = results.length ? results.map((role, index) => {
+        const total = Number(role.total_skills || 0);
+        const hit = Number(role.hit_skills || 0);
+        const coverage = total ? hit / total : 0;
+        return `
+          <tr class="${role === selectedRole ? "is-selected" : ""}" data-index="${index}">
+            <td><b>${esc(role.role_name)}</b><div class="muted small truncate">${esc(role.domain_name || "领域未注明")}</div></td>
+            <td>${esc(role.family_name || "未分组")}</td>
+            <td class="num">${fmtNumber(role.score, 4)}</td>
+            <td class="num">${fmtNumber(hit)} / ${fmtNumber(total)}</td>
+            <td class="num">${fmtPercent(coverage, 1)}</td>
+            <td><button class="table-action" type="button" data-index="${index}" aria-pressed="${role === selectedRole}">${role === selectedRole ? "已选" : "选择"}</button></td>
+          </tr>
+        `;
+      }).join("") : `<tr><td colspan="6">${emptyState("当前简历没有匹配到岗位")}</td></tr>`;
+      $("rankRows").querySelectorAll("button[data-index]").forEach((button) => {
+        button.onclick = () => {
+          selectedRole = results[Number(button.dataset.index)];
+          renderRankRows();
+          renderSelectedRole();
+          resetAnalysis("已切换目标岗位，请重新生成差距分析。");
+        };
+      });
+    }
+
+    function renderSelectedRole() {
+      const role = selectedRole;
+      if (!role) {
+        $("selectedRoleName").textContent = "未选择岗位";
+        $("selectedRoleMeta").textContent = "从左侧排名表选择一个岗位";
+        $("roleScore").textContent = "0.0";
+        $("hitSkills").textContent = "0";
+        $("totalSkills").textContent = "0";
+        $("coverage").textContent = "0.0%";
+        updateActionStates();
+        return;
+      }
+      const total = Number(role.total_skills || 0);
+      const hit = Number(role.hit_skills || 0);
+      $("selectedRoleName").textContent = role.role_name;
+      $("selectedRoleMeta").textContent = `${role.family_name || "未分组"} / ${role.domain_name || "领域未注明"}`;
+      $("roleScore").textContent = fmtNumber(role.score, 4);
+      $("hitSkills").textContent = fmtNumber(hit);
+      $("totalSkills").textContent = fmtNumber(total);
+      $("coverage").textContent = fmtPercent(total ? hit / total : 0, 1);
+      updateActionStates();
+    }
+
+    function updateActionStates() {
+      const hasResume = Boolean(resumeText.trim());
+      const hasRole = Boolean(selectedRole);
+      const hasKey = Boolean($("llmKey").value.trim());
+      const canAnalyze = hasResume && hasRole && hasKey;
+      const reason = !hasResume ? "请先上传并解析简历" : !hasRole ? "请先选择目标岗位" : !hasKey ? "请输入 API Key 后再分析" : "";
+      $("runGap").disabled = !canAnalyze;
+      $("runModify").disabled = !canAnalyze;
+      $("runGap").title = reason;
+      $("runModify").title = reason;
+    }
+
+    async function runGap() {
+      if (!selectedRole || !resumeText) {
+        setStatus("pageStatus", "请先完成匹配并选择岗位", "warn");
+        return;
+      }
+      try {
+        setStatus("pageStatus", "正在生成差距分析", "warn");
+        $("analysisState").textContent = "分析中";
+        const data = await postJSON(`${RESUME_API_BASE}/gap`, {
+          role: selectedRole,
+          resume_text: resumeText,
+          llm: getLlmPayload(),
+        });
+        renderGap(data.report || data);
+        setStatus("pageStatus", "差距分析已生成", "ok");
+      } catch (error) {
+        setStatus("pageStatus", error.message, "error");
+        $("analysisState").textContent = "生成失败";
+        $("analysisOutput").innerHTML = `<div class="notice" style="border-color:#fecaca;background:var(--danger-weak);color:var(--danger)">${esc(error.message)}</div>`;
+      }
+    }
+
+    async function runModify() {
+      if (!selectedRole || !resumeText) {
+        setStatus("pageStatus", "请先完成匹配并选择岗位", "warn");
+        return;
+      }
+      try {
+        setStatus("pageStatus", "正在生成修改建议", "warn");
+        $("analysisState").textContent = "生成修改建议";
+        const data = await postJSON(`${RESUME_API_BASE}/modify`, {
+          role: selectedRole,
+          resume_text: resumeText,
+          llm: getLlmPayload(),
+        });
+        renderModify(data);
+        setStatus("pageStatus", "修改建议已生成", "ok");
+      } catch (error) {
+        setStatus("pageStatus", error.message, "error");
+        $("analysisState").textContent = "生成失败";
+        $("analysisOutput").innerHTML = `<div class="notice" style="border-color:#fecaca;background:var(--danger-weak);color:var(--danger)">${esc(error.message)}</div>`;
+      }
+    }
+
+    function renderGap(report) {
+      const dimensions = report.dimensions || {};
+      const missing = collectMissing(report);
+      const path = report.learning_path || [];
+      const dimensionRows = Object.entries(dimensions);
+      const avgScore = dimensionRows.length
+        ? dimensionRows.reduce((sum, [, dim]) => sum + Number(dim.score || 0), 0) / dimensionRows.length
+        : 0;
+      const highCount = missing.filter((item) => priorityClass(item.importance) === "is-high").length;
+      $("analysisState").textContent = "差距分析";
+      $("analysisState").className = "tag ok";
+      $("analysisOutput").innerHTML = `
+        <div class="detail-stack">
+          <div class="result-hero">
+            <div class="result-card"><span>目标岗位</span><strong class="truncate" title="${esc(selectedRole.role_name)}">${esc(selectedRole.role_name)}</strong></div>
+            <div class="result-card"><span>平均覆盖率</span><strong class="num">${fmtPercent(avgScore, 1)}</strong></div>
+            <div class="result-card"><span>技能缺失项</span><strong class="num">${fmtNumber(missing.length)}</strong></div>
+            <div class="result-card"><span>高优先级</span><strong class="num">${fmtNumber(highCount)}</strong></div>
+          </div>
+
+          <div class="notice"><b>匹配结论：</b>${esc(report.match?.reason || report.overall_advice || "暂无结论")}</div>
+
+          <section>
+            <h3 class="section-title">技能缺失项</h3>
+            <div class="gap-grid">
+              ${missing.length ? missing.slice(0, 9).map(renderGapCard).join("") : `<div class="empty">暂无明显缺失技能</div>`}
+            </div>
+          </section>
+
+          <section>
+            <h3 class="section-title">七维覆盖率</h3>
+            <div class="coverage-list">
+              ${dimensionRows.length ? dimensionRows.map(([key, dim]) => renderCoverageRow(key, dim)).join("") : emptyState("暂无维度数据")}
+            </div>
+          </section>
+
+          <section>
+            <h3 class="section-title">补齐路径</h3>
+            <div class="path-list">
+              ${path.length ? path.map(renderPathItem).join("") : `<div class="empty">暂无学习路径</div>`}
+            </div>
+          </section>
+        </div>
+      `;
+    }
+
+    function renderGapCard(item) {
+      const cls = priorityClass(item.importance);
+      return `
+        <article class="gap-card ${cls}">
+          <h4 class="truncate" title="${esc(item.skill)}">${esc(item.skill)}</h4>
+          <p class="clamp-2">${esc(item.why || "当前简历中缺少可直接支撑该能力的项目或成果描述。")}</p>
+          <div class="gap-meta">
+            <span>${esc(dimName(item.dim))}</span>
+            <span class="tag ${cls === "is-high" ? "high" : cls === "is-medium" ? "medium" : "ok"}">${esc(priorityName(item.importance))}</span>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderCoverageRow(key, dim) {
+      const score = Number(dim.score || 0);
+      const cls = score < 0.45 ? "is-low" : score < 0.72 ? "is-mid" : "";
+      return `
+        <div class="coverage-row ${cls}">
+          <b class="truncate" title="${esc(dimName(key))}">${esc(dimName(key))}</b>
+          <span class="coverage-track"><i style="--w:${Math.max(0, Math.min(score * 100, 100))}%"></i></span>
+          <span class="num">${fmtPercent(score, 0)}</span>
+          <span class="num">${fmtNumber((dim.missing || []).length)} 缺失</span>
+        </div>
+      `;
+    }
+
+    function renderPathItem(item) {
+      return `
+        <article class="path-item">
+          <div>
+            <b>${esc(item.skill || item.title || "待补齐能力")}</b>
+            <span class="muted small">${esc(item.why || item.prerequisite || item.action || "")}</span>
+          </div>
+          <span class="tag ${tagClass(item.importance)}">${esc(item.importance || "medium")}</span>
+        </article>
+      `;
+    }
+
+    function renderModify(data) {
+      const validation = data.validation || {};
+      $("analysisState").textContent = "修改建议";
+      $("analysisState").className = "tag ok";
+      $("analysisOutput").innerHTML = `
+        <div class="detail-stack">
+          <div class="result-hero">
+            <div class="result-card"><span>目标岗位</span><strong class="truncate">${esc(selectedRole.role_name)}</strong></div>
+            <div class="result-card"><span>真实性校验</span><strong>${validation.valid === false ? "需复核" : "通过"}</strong></div>
+            <div class="result-card"><span>违规风险</span><strong class="num">${fmtNumber((validation.violations || []).length)}</strong></div>
+            <div class="result-card"><span>输出类型</span><strong>简历修改</strong></div>
+          </div>
+          ${validation.violations?.length ? `<div class="notice" style="border-color:#fde68a;background:var(--warning-weak);color:#78350f">${esc(validation.violations.join("；"))}</div>` : ""}
+          <div class="markdown-box">${esc(data.markdown || data.analysis || "暂无修改建议")}</div>
+        </div>
+      `;
+    }
+
+    function collectMissing(report) {
+      if (Array.isArray(report.missing_skills) && report.missing_skills.length) {
+        return report.missing_skills.map((item) => normalizeMissing(item));
+      }
+      return Object.entries(report.dimensions || {}).flatMap(([dim, value]) => (
+        (value.missing || []).map((item) => normalizeMissing(item, dim))
+      ));
+    }
+
+    function normalizeMissing(item, fallbackDim = "") {
+      if (typeof item === "string") return { skill: item, dim: fallbackDim, importance: "medium", why: "" };
+      return {
+        skill: item.skill || item.name || item.skill_name || item.label || "未命名技能",
+        dim: item.dim || item.dimension || fallbackDim,
+        importance: item.importance || item.priority || item.level || "medium",
+        why: item.why || item.reason || item.suggestion || item.description || "",
+      };
+    }
+
+    function priorityClass(value) {
+      const key = String(value || "").toLowerCase();
+      if (key.includes("high") || key.includes("urgent") || key.includes("critical") || key.includes("高")) return "is-high";
+      if (key.includes("medium") || key.includes("中")) return "is-medium";
+      return "";
+    }
+
+    function priorityName(value) {
+      const cls = priorityClass(value);
+      if (cls === "is-high") return "高优先级";
+      if (cls === "is-medium") return "中优先级";
+      return "低优先级";
+    }
+
+    function resetAnalysis(text) {
+      $("analysisState").textContent = "等待分析";
+      $("analysisState").className = "tag";
+      $("analysisOutput").innerHTML = emptyState(text);
+      updateActionStates();
+    }
+
+    function dimName(key) {
+      return {
+        knowledge: "知识",
+        skill: "技术",
+        qualifications: "任职条件",
+        preference: "招聘偏好",
+        motivation: "动机",
+        trait: "特质",
+        self_concept: "自我概念",
+      }[key] || key || "未分组";
+    }
+
+    function loadLlmForm() {
+      $("llmProvider").value = llmSettings.provider;
+      $("llmKey").value = llmSettings.api_key;
+      $("llmModel").value = llmSettings.model;
+      $("llmBaseUrl").value = llmSettings.base_url;
+    }
+
+    function persistLlmSettings() {
+      llmSettings = {
+        provider: $("llmProvider").value,
+        api_key: $("llmKey").value.trim(),
+        model: $("llmModel").value.trim(),
+        base_url: $("llmBaseUrl").value.trim(),
+      };
+      sessionStorage.setItem("resumeLlmApiKey", llmSettings.api_key);
+      sessionStorage.setItem("resumeLlmModel", llmSettings.model);
+      sessionStorage.setItem("resumeLlmBaseUrl", llmSettings.base_url);
+      updateActionStates();
+    }
+
+    function getLlmPayload() {
+      persistLlmSettings();
+      if (!llmSettings.api_key) {
+        throw new Error("请先在匹配配置里输入 API Key");
+      }
+      const payload = {
+        provider: llmSettings.provider,
+        api_key: llmSettings.api_key,
+      };
+      if (llmSettings.model) payload.model = llmSettings.model;
+      if (llmSettings.base_url) payload.base_url = llmSettings.base_url;
+      return payload;
+    }
+
+    $("health").onclick = checkHealth;
+    $("rank").onclick = rankResume;
+    $("runGap").onclick = runGap;
+    $("runModify").onclick = runModify;
+    ["llmProvider", "llmKey", "llmModel", "llmBaseUrl"].forEach((id) => {
+      $(id).addEventListener(id === "llmKey" ? "input" : "change", persistLlmSettings);
+    });
+    $("resumeFile").onchange = () => {
+      resumeText = "";
+      selectedRole = null;
+      $("uploadState").textContent = $("resumeFile").files[0]?.name || "尚未上传简历";
+      $("resumeChars").textContent = "待解析";
+      renderSelectedRole();
+      resetAnalysis("文件已选择，点击“开始匹配”会自动解析并计算岗位排名。");
+    };
+    loadLlmForm();
+    updateActionStates();
+    checkHealth();
+  </script>
+</body>
+</html>

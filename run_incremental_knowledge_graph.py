@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -81,9 +82,26 @@ def main() -> None:
         help="领域准入后仅对 IT 岗位调用已配置的讯飞星火模型",
     )
     parser.add_argument("--skip-import", action="store_true", help="数据已经在原始层时跳过导入")
+    parser.add_argument(
+        "--ingest-run-id",
+        action="append",
+        default=[],
+        help="已完成导入/处理的批次ID；跨平台汇总时可重复传入。",
+    )
     parser.add_argument("--force-import", action="store_true", help="同一文件曾按旧字段规则导入时强制重新适配")
+    parser.add_argument(
+        "--allow-processing-failures",
+        action="store_true",
+        help="允许少量单条能力分析失败后继续发布；失败记录仍保留在图谱和报告中",
+    )
     parser.add_argument("--skip-normalization", action="store_true", help="只导入并处理能力，不做向量归一化")
     parser.add_argument("--publish", action="store_true", help="发布归一化结果并切换 Neo4j 活动版本")
+    parser.add_argument(
+        "--normalization-mode",
+        choices=("auto", "incremental", "full"),
+        default="auto",
+        help="auto优先局部重算、无活动基线时全量；full用于周期性完整校准。",
+    )
     parser.add_argument(
         "--skip-new-role-discovery",
         action="store_true",
@@ -92,8 +110,8 @@ def main() -> None:
     parser.add_argument(
         "--new-role-llm-mode",
         choices=("off", "auto", "required"),
-        default="auto",
-        help="新岗位候选语义复核模式；默认 auto，无密钥时保留规则候选",
+        default="required",
+        help="新岗位候选语义复核模式；默认 required，使用讯飞 Spark Lite",
     )
     parser.add_argument(
         "--new-role-limit",
@@ -104,8 +122,8 @@ def main() -> None:
     parser.add_argument(
         "--ability-change-limit",
         type=int,
-        default=5,
-        help="每次最多送入语义复核的旧岗位能力变化候选数；默认 5，设为 0 可关闭",
+        default=40,
+        help="每次最多送入语义复核的旧岗位能力变化候选数；默认 40，设为 0 可关闭",
     )
     parser.add_argument(
         "--new-role-timeout-seconds",
@@ -116,7 +134,12 @@ def main() -> None:
     parser.add_argument(
         "--new-role-data-root",
         type=Path,
-        default=PROJECT_ROOT / "output" / "role_evolution_workbench_v2",
+        default=Path(
+            os.getenv(
+                "EVOLUTION_DATA_ROOT",
+                str(PROJECT_ROOT / "output" / "role_evolution_workbench_v2"),
+            )
+        ),
         help="新岗位候选、报告和审核队列的保存目录",
     )
     parser.add_argument(
@@ -144,12 +167,15 @@ def main() -> None:
             importer_args.append("--force")
         run_step("1/7 原始数据增量导入", PROJECT_ROOT / "raw_jd_layer" / "importer.py", *importer_args)
 
+    ingest_run_ids = list(dict.fromkeys(value.strip() for value in args.ingest_run_id if value.strip()))
     ingest_run_id = ""
     ingestion_report = PROJECT_ROOT / "output" / "raw_jd_ingestion" / "last_run.json"
     if not args.skip_import and ingestion_report.exists():
         ingest_run_id = str(
             json.loads(ingestion_report.read_text(encoding="utf-8")).get("run_id") or ""
         )
+        if ingest_run_id and ingest_run_id not in ingest_run_ids:
+            ingest_run_ids.append(ingest_run_id)
 
     domain_args = [*common, "--batch-size", str(max(1, min(args.batch_size, 500)))]
     if args.limit:
@@ -187,9 +213,16 @@ def main() -> None:
                 f"仍有 {processed_metrics['needs_llm']} 条缺少能力分析；"
                 "请先补齐五维能力或配置 --llm-endpoint。"
             )
-        if int(processed_metrics.get("failed") or 0) > 0:
+        failed_count = int(processed_metrics.get("failed") or 0)
+        if failed_count > 0 and not args.allow_processing_failures:
             raise RuntimeError(
-                f"能力处理失败 {processed_metrics['failed']} 条；已禁止继续发布。"
+                f"能力处理失败 {failed_count} 条；已禁止继续发布。"
+            )
+        if failed_count > 0 and args.allow_processing_failures:
+            print(
+                f"警告：能力处理有 {failed_count} 条失败记录，按演示容错参数继续发布；"
+                "失败记录不会生成能力关系。",
+                flush=True,
             )
 
     run_step(
@@ -204,35 +237,56 @@ def main() -> None:
         print("\n已完成原始层和能力证据层；按参数跳过归一化与发布。", flush=True)
         return
 
-    normalize_args = [
-        "--work-dir", str(args.work_dir.resolve()),
-        "--batch-size", str(max(1, min(args.batch_size, 500))),
-        "--neo4j-config", str(neo4j_config),
-    ]
-    # 新数据需要重新导出当前完整快照；旧目录仅作为可覆盖的中间产物。
-    if (args.work_dir / "knowledge_graph.db").exists():
-        normalize_args.append("--overwrite")
-    if args.limit:
-        normalize_args += ["--limit", str(args.limit)]
-    run_step("5/7 复用关键词归一化与知识图谱候选生成", PROJECT_ROOT / "processing_layer" / "normalize_with_demo.py", *normalize_args)
+    normalization_result: dict = {}
+    used_incremental = False
+    if args.publish and ingest_run_ids and args.normalization_mode != "full":
+        from processing_layer.incremental_normalization import (
+            IncrementalNormalizationPublisher,
+        )
+        from trusted_graph_agent.neo4j_repository import Neo4jGraphRepository
+        from trusted_graph_agent.normalization_experiment import NormalizationConfig
 
-    publish_args = [
-        "--database", str((args.work_dir / "knowledge_graph.db").resolve()),
-        "--normalization-dir", str((args.work_dir / "skill_reports").resolve()),
-        "--neo4j-config", str(neo4j_config),
-    ]
-    if args.publish:
-        publish_args.append("--publish")
-        label = "6/7 发布到 Neo4j 并切换活动版本"
-    else:
-        label = "6/7 只读校验（未发布；加 --publish 才写入活动版本）"
-    run_step(label, PROJECT_ROOT / "processing_layer" / "publish_normalization.py", *publish_args)
+        print("\n===== 5-6/7 新词归一化与受影响岗位局部发布 =====", flush=True)
+        normalization_result = IncrementalNormalizationPublisher(
+            Neo4jGraphRepository(neo4j_config),
+            NormalizationConfig.load(
+                PROJECT_ROOT / "trusted_graph_agent" / "normalization_config_v5.json"
+            ),
+        ).run(ingest_run_ids, publish=True)
+        print(json.dumps(normalization_result, ensure_ascii=False, indent=2), flush=True)
+        used_incremental = normalization_result.get("status") != "FULL_REBUILD_REQUIRED"
+        if not used_incremental and args.normalization_mode == "incremental":
+            raise RuntimeError("请求仅增量归一化，但当前没有可复用的活动基线")
+
+    if not used_incremental:
+        normalize_args = [
+            "--work-dir", str(args.work_dir.resolve()),
+            "--batch-size", str(max(1, min(args.batch_size, 500))),
+            "--neo4j-config", str(neo4j_config),
+        ]
+        if (args.work_dir / "knowledge_graph.db").exists():
+            normalize_args.append("--overwrite")
+        if args.limit:
+            normalize_args += ["--limit", str(args.limit)]
+        run_step("5/7 完整关键词归一化与候选生成", PROJECT_ROOT / "processing_layer" / "normalize_with_demo.py", *normalize_args)
+
+        publish_args = [
+            "--database", str((args.work_dir / "knowledge_graph.db").resolve()),
+            "--normalization-dir", str((args.work_dir / "skill_reports").resolve()),
+            "--neo4j-config", str(neo4j_config),
+        ]
+        if args.publish:
+            publish_args.append("--publish")
+            label = "6/7 发布到 Neo4j 并切换活动版本"
+        else:
+            label = "6/7 只读校验（未发布；加 --publish 才写入活动版本）"
+        run_step(label, PROJECT_ROOT / "processing_layer" / "publish_normalization.py", *publish_args)
 
     discovery = {
         "status": "NOT_RUN",
         "reason": "发布活动图谱后才运行新岗位发现",
     }
-    discovery_error: subprocess.CalledProcessError | None = None
+    discovery_error: Exception | None = None
     if args.publish and args.skip_new_role_discovery:
         discovery = {"status": "SKIPPED", "reason": "--skip-new-role-discovery"}
     elif args.publish:
@@ -252,19 +306,56 @@ def main() -> None:
                 "new_role_discovery.demo",
                 *discovery_args,
             )
+            task_snapshot = latest_discovery_task(
+                args.new_role_data_root.resolve()
+            )
+            summary = task_snapshot.get("summary") or {}
+            if task_snapshot.get("task_status") not in {
+                "REVIEW_READY",
+                "DEGRADED_REVIEW_READY",
+            }:
+                raise RuntimeError("岗位演化任务未生成可复用的完成快照")
+            required_summary_fields = {
+                "algorithm_version",
+                "result_schema_version",
+                "new_role_candidates",
+                "public_new_role_candidates",
+                "skill_change_candidates",
+                "skill_review_tasks",
+            }
+            missing_summary = sorted(required_summary_fields - set(summary))
+            if missing_summary:
+                raise RuntimeError(
+                    "岗位演化结果缺少闭环字段：" + ", ".join(missing_summary)
+                )
             discovery = {
                 "status": "COMPLETED",
+                "pipeline_contract_version": "role-evolution-closed-loop-v2",
                 "data_root": str(args.new_role_data_root.resolve()),
                 "llm_mode": args.new_role_llm_mode,
+                "branches": {
+                    "new_role_discovery": {
+                        "status": "COMPLETED" if args.new_role_limit > 0 else "SKIPPED",
+                        "candidate_count": int(summary.get("new_role_candidates") or 0),
+                        "public_count": int(summary.get("public_new_role_candidates") or 0),
+                    },
+                    "existing_role_ability_updates": {
+                        "status": "COMPLETED" if args.ability_change_limit > 0 else "SKIPPED",
+                        "candidate_count": int(summary.get("skill_change_candidates") or 0),
+                        "review_task_count": int(summary.get("skill_review_tasks") or 0),
+                        "reviewed_role_count": int(summary.get("skill_review_roles") or 0),
+                    },
+                },
                 "ability_change_limit": max(0, min(args.ability_change_limit, 100)),
                 "ability_change_source": args.platform,
-                **latest_discovery_task(args.new_role_data_root.resolve()),
+                **task_snapshot,
             }
-        except subprocess.CalledProcessError as error:
+        except (subprocess.CalledProcessError, RuntimeError) as error:
             discovery_error = error
             discovery = {
                 "status": "FAILED",
-                "exit_code": error.returncode,
+                "pipeline_contract_version": "role-evolution-closed-loop-v2",
+                "exit_code": getattr(error, "returncode", 1),
                 "data_root": str(args.new_role_data_root.resolve()),
                 "message": "图谱已发布，但岗位与能力变化发现阶段失败；活动版本未回滚",
             }
@@ -273,6 +364,8 @@ def main() -> None:
         "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "status": "FAILED" if discovery_error else "COMPLETED",
         "graph_publish": "COMPLETED" if args.publish else "VALIDATED_ONLY",
+        "normalization_mode": "incremental" if used_incremental else "full",
+        "normalization": normalization_result,
         "new_role_discovery": discovery,
     }
     args.work_dir.resolve().mkdir(parents=True, exist_ok=True)
