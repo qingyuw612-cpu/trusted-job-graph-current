@@ -3,74 +3,64 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>简历匹配 · 统一前端</title>
-  <link rel="stylesheet" href="assets/ui.css">
+  <title>知途 talentgraph · 人岗匹配</title>
+  <link rel="stylesheet" href="assets/ui.css?v=closed-loop-20260902-action-column1">
 </head>
 <body>
   <div class="app-shell" id="shell"></div>
-  <script src="assets/ui.js"></script>
+  <script src="assets/ui.js?v=brand-title-20260903"></script>
   <script>
     const localDemo = location.protocol === "file:" || ["127.0.0.1", "localhost"].includes(location.hostname);
-    const RESUME_API_BASE = new URLSearchParams(location.search).get("resumeApi")
-      || (localDemo ? "http://127.0.0.1:8000" : "/resume-api");
+    // Production is same-origin under /api/v1/resume; local development uses
+    // the fixed 8000 port. Do not accept API URL query overrides.
+    const RESUME_API_BASE = localDemo ? "http://127.0.0.1:8000" : "/api/v1/resume";
     let resumeText = "";
     let rankResult = null;
     let selectedRole = null;
-    let llmSettings = {
-      provider: "deepseek",
-      api_key: sessionStorage.getItem("resumeLlmApiKey") || "",
-      model: sessionStorage.getItem("resumeLlmModel") || "deepseek-chat",
-      base_url: sessionStorage.getItem("resumeLlmBaseUrl") || "",
-    };
+    ["resumeLlmProvider", "resumeLlmApiKey", "resumeLlmModel", "resumeLlmBaseUrl"]
+      .forEach((key) => sessionStorage.removeItem(key));
 
     $("shell").innerHTML = navShell(
       "resume",
       "人岗差距分析",
-      "上传简历后完成岗位匹配，并以技能缺失项、维度覆盖率和学习路径呈现分析结果"
+      "上传简历，看看适合哪些岗位，以及下一步补什么能力。"
     ) + `
       <main id="mainContent" class="page page-grid">
         <section class="panel setup-panel">
           <div class="panel-head">
             <div class="panel-title">
-              <h2>匹配配置</h2>
-              <small>选择简历和分析模型后开始匹配</small>
+              <h2>上传简历</h2>
+              <small>支持 PDF、Word、Markdown 和文本简历</small>
             </div>
             <div class="actions">
-              <button id="health" type="button">检查服务</button>
+              <button id="health" type="button">刷新状态</button>
             </div>
           </div>
           <div class="toolbar match-toolbar">
             <div class="wide">
-              <label for="resumeFile">简历文件</label>
-              <input id="resumeFile" type="file" accept=".pdf,.docx,.md,.txt">
+              <label for="resumeFile">选择简历</label>
+              <input id="resumeFile" class="resume-file-input" type="file" accept=".pdf,.docx,.md,.txt">
+              <div class="resume-file-picker">
+                <span class="resume-file-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path d="M14 3.5H7.5A2.5 2.5 0 0 0 5 6v12a2.5 2.5 0 0 0 2.5 2.5h9A2.5 2.5 0 0 0 19 18V8.5L14 3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M14 3.5v5h5M12 17v-5m0 0-2 2m2-2 2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+                <label class="resume-file-copy" for="resumeFile">
+                  <b id="resumeFileName">点击选择简历文件</b>
+                  <small>支持 PDF、DOCX、Markdown、TXT</small>
+                </label>
+                <button id="loadSample" class="resume-sample-action" type="button">一键使用示例</button>
+                <label class="resume-file-action" for="resumeFile">浏览文件</label>
+              </div>
             </div>
             <div>
-              <label for="topk">返回岗位数</label>
+              <label for="topk">查看岗位数</label>
               <input id="topk" class="num" type="number" min="1" max="20" value="8">
             </div>
-            <div>
-              <label for="llmProvider">供应商</label>
-              <select id="llmProvider">
-                <option value="deepseek">DeepSeek</option>
-                <option value="iflytek">讯飞星火</option>
-                <option value="openai">OpenAI</option>
-                <option value="custom">自定义</option>
-              </select>
-            </div>
             <div class="wide">
-              <label for="llmKey">模型密钥</label>
-              <input id="llmKey" type="password" autocomplete="off" placeholder="输入自己的 API Key">
-            </div>
-            <div>
-              <label for="llmModel">模型</label>
-              <input id="llmModel" type="text" placeholder="deepseek-chat">
-            </div>
-            <div class="wide">
-              <label for="llmBaseUrl">模型服务地址（可选）</label>
-              <input id="llmBaseUrl" type="url" placeholder="留空使用供应商默认地址">
-            </div>
-            <div class="wide">
-              <label>解析状态</label>
+              <label>简历状态</label>
               <div class="upload-state">
                 <span id="uploadState" class="truncate">尚未上传简历</span>
                 <span id="resumeChars" class="tag">0 字</span>
@@ -86,8 +76,8 @@
           <section class="panel">
             <div class="panel-head">
               <div class="panel-title">
-                <h2>岗位匹配排名</h2>
-                <small>先用粗排结果选择目标岗位，再生成差距分析</small>
+                <h2>匹配岗位</h2>
+                <small>先选一个目标岗位，再查看你的能力差距</small>
               </div>
               <span id="rankCount" class="badge">0 个岗位</span>
             </div>
@@ -96,15 +86,15 @@
                 <thead>
                   <tr>
                     <th>岗位</th>
-                    <th>岗位族</th>
-                    <th class="num">得分</th>
-                    <th class="num">命中</th>
-                    <th class="num">覆盖率</th>
+                    <th>方向</th>
+                    <th class="num">匹配度</th>
+                    <th class="num">符合项</th>
+                    <th class="num">覆盖程度</th>
                     <th>操作</th>
                   </tr>
                 </thead>
                 <tbody id="rankRows">
-                  <tr><td colspan="6">${emptyState("上传简历并开始匹配后显示结果")}</td></tr>
+                  <tr><td colspan="6">${emptyState("上传简历并点击“开始匹配”，这里会显示适合你的岗位")}</td></tr>
                 </tbody>
               </table>
             </div>
@@ -114,20 +104,21 @@
             <section class="panel">
               <div class="panel-head">
                 <div class="panel-title">
-                  <h2 id="selectedRoleName">未选择岗位</h2>
-                  <small id="selectedRoleMeta">从左侧排名表选择一个岗位</small>
+                  <h2 id="selectedRoleName">先选择一个岗位</h2>
+                  <small id="selectedRoleMeta">选中后查看匹配详情</small>
                 </div>
               </div>
               <div class="panel-body detail-stack">
+                <div class="notice" id="algorithmNote">匹配结果会综合技能相关性和岗位要求，帮助你判断下一步。</div>
                 <div class="metric-grid">
                   <div class="metric"><span>匹配得分</span><strong id="roleScore" class="num">0.0</strong></div>
-                  <div class="metric"><span>命中技能</span><strong id="hitSkills" class="num">0</strong></div>
-                  <div class="metric"><span>总技能</span><strong id="totalSkills" class="num">0</strong></div>
-                  <div class="metric"><span>覆盖率</span><strong id="coverage" class="num">0.0%</strong></div>
+                  <div class="metric"><span>符合能力</span><strong id="hitSkills" class="num">0</strong></div>
+                  <div class="metric"><span>岗位能力</span><strong id="totalSkills" class="num">0</strong></div>
+                  <div class="metric"><span>匹配覆盖</span><strong id="coverage" class="num">0.0%</strong></div>
                 </div>
                 <div class="actions right">
-                  <button id="runGap" type="button" disabled>生成差距分析</button>
-                  <button id="runModify" class="primary" type="button" disabled>生成修改建议</button>
+                  <button id="runGap" type="button" disabled>查看能力差距</button>
+                  <button id="runModify" class="primary" type="button" disabled>优化简历表达</button>
                 </div>
               </div>
             </section>
@@ -135,13 +126,13 @@
             <section class="panel analysis-panel">
               <div class="panel-head">
                 <div class="panel-title">
-                  <h2>人岗差距分析结果</h2>
-                  <small>技能缺失项、维度覆盖率和学习路径集中展示</small>
+                  <h2>你的能力差距</h2>
+                  <small>清楚看到缺什么、差多少、先补什么</small>
                 </div>
                 <span id="analysisState" class="tag">等待分析</span>
               </div>
               <div id="analysisOutput" class="panel-body">
-                ${emptyState("完成匹配并选择目标岗位后，点击“生成差距分析”。这里会展示技能缺失项和补齐路径。")}
+                ${emptyState("完成匹配并选择目标岗位后，点击“查看能力差距”。")}
               </div>
             </section>
           </aside>
@@ -151,12 +142,12 @@
 
     async function checkHealth() {
       try {
-        setStatus("pageStatus", "正在检查简历分析服务", "warn");
+        setStatus("pageStatus", "正在准备匹配功能", "warn");
         const health = await getJSON(`${RESUME_API_BASE}/health`);
         const roles = health.roles_available ?? 0;
         setStatus("pageStatus", `服务在线 · ${fmtNumber(roles)} 个可匹配岗位`, "ok");
       } catch {
-        setStatus("pageStatus", "简历分析服务未连接", "error");
+        setStatus("pageStatus", "匹配功能暂不可用", "error");
       }
     }
 
@@ -186,6 +177,32 @@
       return uploadResume();
     }
 
+    async function loadSampleResume() {
+      const button = $("loadSample");
+      button.disabled = true;
+      try {
+        setStatus("pageStatus", "正在载入示例简历", "warn");
+        const response = await request("assets/sample-resume.md?v=20260902-demo1");
+        if (!response.ok) throw new Error("示例简历加载失败");
+        resumeText = await response.text();
+        $("resumeFile").value = "";
+        $("resumeFileName").textContent = "示例简历 · AI 应用开发工程师";
+        $("resumeFileName").closest(".resume-file-picker").classList.add("has-file");
+        $("uploadState").textContent = "已载入系统示例简历";
+        $("resumeChars").textContent = `${fmtNumber(resumeText.length)} 字`;
+        selectedRole = null;
+        rankResult = null;
+        renderSelectedRole();
+        resetAnalysis("示例简历已载入，正在计算岗位匹配。 ");
+        updateActionStates();
+        await rankResume();
+      } catch (error) {
+        setStatus("pageStatus", error.message, "error");
+      } finally {
+        button.disabled = false;
+      }
+    }
+
     async function rankResume() {
       if (!await ensureResumeText()) return;
       try {
@@ -197,8 +214,10 @@
         selectedRole = rankResult.results?.[0] || null;
         renderRankRows();
         renderSelectedRole();
-        resetAnalysis("已完成岗位粗排。请选择一个目标岗位，再生成差距分析。");
+        resetAnalysis("已找到匹配岗位。请选择一个目标岗位，再查看能力差距。");
         updateActionStates();
+        const algorithm = rankResult.algorithm || {};
+        $("algorithmNote").textContent = "匹配结果已结合岗位要求和技能相关性，可作为选择方向的参考。";
         setStatus("pageStatus", `匹配完成 · ${fmtNumber(rankResult.count || 0)} 个岗位`, "ok");
       } catch (error) {
         setStatus("pageStatus", error.message, "error");
@@ -228,7 +247,7 @@
           selectedRole = results[Number(button.dataset.index)];
           renderRankRows();
           renderSelectedRole();
-          resetAnalysis("已切换目标岗位，请重新生成差距分析。");
+          resetAnalysis("已切换目标岗位，请重新查看能力差距。");
         };
       });
     }
@@ -236,8 +255,8 @@
     function renderSelectedRole() {
       const role = selectedRole;
       if (!role) {
-        $("selectedRoleName").textContent = "未选择岗位";
-        $("selectedRoleMeta").textContent = "从左侧排名表选择一个岗位";
+        $("selectedRoleName").textContent = "先选择一个岗位";
+        $("selectedRoleMeta").textContent = "选中后查看匹配详情";
         $("roleScore").textContent = "0.0";
         $("hitSkills").textContent = "0";
         $("totalSkills").textContent = "0";
@@ -259,9 +278,8 @@
     function updateActionStates() {
       const hasResume = Boolean(resumeText.trim());
       const hasRole = Boolean(selectedRole);
-      const hasKey = Boolean($("llmKey").value.trim());
-      const canAnalyze = hasResume && hasRole && hasKey;
-      const reason = !hasResume ? "请先上传并解析简历" : !hasRole ? "请先选择目标岗位" : !hasKey ? "请输入 API Key 后再分析" : "";
+      const canAnalyze = hasResume && hasRole;
+      const reason = !hasResume ? "请先上传简历" : !hasRole ? "请先选择目标岗位" : "";
       $("runGap").disabled = !canAnalyze;
       $("runModify").disabled = !canAnalyze;
       $("runGap").title = reason;
@@ -274,15 +292,14 @@
         return;
       }
       try {
-        setStatus("pageStatus", "正在生成差距分析", "warn");
+        setStatus("pageStatus", "正在整理你的能力差距", "warn");
         $("analysisState").textContent = "分析中";
         const data = await postJSON(`${RESUME_API_BASE}/gap`, {
           role: selectedRole,
           resume_text: resumeText,
-          llm: getLlmPayload(),
-        });
+        }, 120000);
         renderGap(data.report || data);
-        setStatus("pageStatus", "差距分析已生成", "ok");
+        setStatus("pageStatus", "能力差距已生成", "ok");
       } catch (error) {
         setStatus("pageStatus", error.message, "error");
         $("analysisState").textContent = "生成失败";
@@ -296,15 +313,14 @@
         return;
       }
       try {
-        setStatus("pageStatus", "正在生成修改建议", "warn");
-        $("analysisState").textContent = "生成修改建议";
+        setStatus("pageStatus", "正在优化简历表达", "warn");
+        $("analysisState").textContent = "优化中";
         const data = await postJSON(`${RESUME_API_BASE}/modify`, {
           role: selectedRole,
           resume_text: resumeText,
-          llm: getLlmPayload(),
-        });
+        }, 120000);
         renderModify(data);
-        setStatus("pageStatus", "修改建议已生成", "ok");
+        setStatus("pageStatus", "简历优化建议已生成", "ok");
       } catch (error) {
         setStatus("pageStatus", error.message, "error");
         $("analysisState").textContent = "生成失败";
@@ -342,7 +358,7 @@
           </section>
 
           <section>
-            <h3 class="section-title">七维覆盖率</h3>
+            <h3 class="section-title">能力覆盖情况</h3>
             <div class="coverage-list">
               ${dimensionRows.length ? dimensionRows.map(([key, dim]) => renderCoverageRow(key, dim)).join("") : emptyState("暂无维度数据")}
             </div>
@@ -397,20 +413,85 @@
       `;
     }
 
+    function renderMarkdownInline(value) {
+      return esc(value)
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/__([^_]+)__/g, "<strong>$1</strong>")
+        .replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
+    }
+
+    function renderMarkdown(value) {
+      const source = typeof value === "string" ? value : JSON.stringify(value || "", null, 2);
+      const lines = source.replace(/\r\n?/g, "\n").split("\n");
+      const html = [];
+      let listType = "";
+      let inCode = false;
+      let codeLines = [];
+
+      const closeList = () => {
+        if (!listType) return;
+        html.push(`</${listType}>`);
+        listType = "";
+      };
+
+      lines.forEach((line) => {
+        if (/^```/.test(line.trim())) {
+          closeList();
+          if (inCode) {
+            html.push(`<pre><code>${esc(codeLines.join("\n"))}</code></pre>`);
+            codeLines = [];
+          }
+          inCode = !inCode;
+          return;
+        }
+        if (inCode) {
+          codeLines.push(line);
+          return;
+        }
+
+        const heading = line.match(/^(#{1,4})\s+(.+)$/);
+        const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+        const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+        if (heading) {
+          closeList();
+          const level = Math.min(heading[1].length + 1, 5);
+          html.push(`<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`);
+        } else if (unordered || ordered) {
+          const nextType = unordered ? "ul" : "ol";
+          if (listType !== nextType) {
+            closeList();
+            html.push(`<${nextType}>`);
+            listType = nextType;
+          }
+          html.push(`<li>${renderMarkdownInline((unordered || ordered)[1])}</li>`);
+        } else if (/^>\s?/.test(line)) {
+          closeList();
+          html.push(`<blockquote>${renderMarkdownInline(line.replace(/^>\s?/, ""))}</blockquote>`);
+        } else if (!line.trim()) {
+          closeList();
+        } else {
+          closeList();
+          html.push(`<p>${renderMarkdownInline(line)}</p>`);
+        }
+      });
+      closeList();
+      if (inCode && codeLines.length) {
+        html.push(`<pre><code>${esc(codeLines.join("\n"))}</code></pre>`);
+      }
+      return html.join("");
+    }
+
     function renderModify(data) {
-      const validation = data.validation || {};
-      $("analysisState").textContent = "修改建议";
+      $("analysisState").textContent = "简历优化";
       $("analysisState").className = "tag ok";
       $("analysisOutput").innerHTML = `
         <div class="detail-stack">
-          <div class="result-hero">
+          <div class="result-hero modify-summary">
             <div class="result-card"><span>目标岗位</span><strong class="truncate">${esc(selectedRole.role_name)}</strong></div>
-            <div class="result-card"><span>真实性校验</span><strong>${validation.valid === false ? "需复核" : "通过"}</strong></div>
-            <div class="result-card"><span>违规风险</span><strong class="num">${fmtNumber((validation.violations || []).length)}</strong></div>
             <div class="result-card"><span>输出类型</span><strong>简历修改</strong></div>
           </div>
-          ${validation.violations?.length ? `<div class="notice" style="border-color:#fde68a;background:var(--warning-weak);color:#78350f">${esc(validation.violations.join("；"))}</div>` : ""}
-          <div class="markdown-box">${esc(data.markdown || data.analysis || "暂无修改建议")}</div>
+          <div class="markdown-box">${renderMarkdown(data.markdown || data.analysis || "暂无修改建议")}</div>
         </div>
       `;
     }
@@ -467,58 +548,25 @@
       }[key] || key || "未分组";
     }
 
-    function loadLlmForm() {
-      $("llmProvider").value = llmSettings.provider;
-      $("llmKey").value = llmSettings.api_key;
-      $("llmModel").value = llmSettings.model;
-      $("llmBaseUrl").value = llmSettings.base_url;
-    }
-
-    function persistLlmSettings() {
-      llmSettings = {
-        provider: $("llmProvider").value,
-        api_key: $("llmKey").value.trim(),
-        model: $("llmModel").value.trim(),
-        base_url: $("llmBaseUrl").value.trim(),
-      };
-      sessionStorage.setItem("resumeLlmApiKey", llmSettings.api_key);
-      sessionStorage.setItem("resumeLlmModel", llmSettings.model);
-      sessionStorage.setItem("resumeLlmBaseUrl", llmSettings.base_url);
-      updateActionStates();
-    }
-
-    function getLlmPayload() {
-      persistLlmSettings();
-      if (!llmSettings.api_key) {
-        throw new Error("请先在匹配配置里输入 API Key");
-      }
-      const payload = {
-        provider: llmSettings.provider,
-        api_key: llmSettings.api_key,
-      };
-      if (llmSettings.model) payload.model = llmSettings.model;
-      if (llmSettings.base_url) payload.base_url = llmSettings.base_url;
-      return payload;
-    }
-
     $("health").onclick = checkHealth;
+    $("loadSample").onclick = loadSampleResume;
     $("rank").onclick = rankResume;
     $("runGap").onclick = runGap;
     $("runModify").onclick = runModify;
-    ["llmProvider", "llmKey", "llmModel", "llmBaseUrl"].forEach((id) => {
-      $(id).addEventListener(id === "llmKey" ? "input" : "change", persistLlmSettings);
-    });
     $("resumeFile").onchange = () => {
       resumeText = "";
       selectedRole = null;
-      $("uploadState").textContent = $("resumeFile").files[0]?.name || "尚未上传简历";
+      const filename = $("resumeFile").files[0]?.name || "";
+      $("resumeFileName").textContent = filename || "点击选择简历文件";
+      $("resumeFileName").closest(".resume-file-picker").classList.toggle("has-file", Boolean(filename));
+      $("uploadState").textContent = filename || "尚未上传简历";
       $("resumeChars").textContent = "待解析";
       renderSelectedRole();
       resetAnalysis("文件已选择，点击“开始匹配”会自动解析并计算岗位排名。");
     };
-    loadLlmForm();
     updateActionStates();
     checkHealth();
   </script>
 </body>
 </html>
+
