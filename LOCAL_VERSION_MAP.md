@@ -1,8 +1,8 @@
 # 本地版本与数据边界
 
-## 最终前端锁（2026-09-03）
+## 最终前端锁（2026-09-04）
 
-当前线上与本地唯一最终前端版本为 `closed-loop-2026.09`，唯一源目录是
+当前线上与本地唯一最终前端版本为 `closed-loop-2026.09.04`，唯一源目录是
 `trusted-job-graph-current/qianduan/html-main2`。发布前必须运行
 `scripts/check_final_frontend.ps1`；文件与 `deploy/FINAL_FRONTEND_RELEASE.json`
 不一致时禁止构建和上线。不得再从同级 `qianduan`、`hackathon-final-demo`、
@@ -57,3 +57,4 @@
 - 不要把 `display_graph.json` 导入本地完整库；展示包应导入单独的空 Neo4j 数据库。
 - 不要把 `output/` 或 `crawler_standalone_output/` 当成 Neo4j 数据库备份。
 - 不要把 `config/neo4j_connection.json`、Neo4j dump、原始 JD 或 API 密钥提交到 Git。
+
