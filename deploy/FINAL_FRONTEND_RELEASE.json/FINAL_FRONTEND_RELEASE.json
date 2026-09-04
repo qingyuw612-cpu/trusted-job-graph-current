@@ -1,0 +1,17 @@
+{
+  "release_id": "closed-loop-2026.09.04",
+  "online_url": "https://talentgraphagent.site",
+  "synced_at": "2026-09-04",
+  "status": "FINAL_LOCKED",
+  "source_root": "qianduan/html-main2",
+  "files": {
+    "qianduan/html-main2/index.html": "F4DE5B393C8244DFD7CCF89FE1F9F28801E94E52FACDDB17C57B88151311988B",
+    "qianduan/html-main2/panorama.html": "4183DA4099B0BF4FCB4759357902BA1D64D97155150E54212DBC1887D6893390",
+    "qianduan/html-main2/resume-match.html": "CE661F47C7919879B04FF354FAE3477D4AC8C91FA2C210FA6BE15A25D1BFE0D0",
+    "qianduan/html-main2/emerging-roles.html": "100213185FE2D052077220BD27CBD9970A6DC5E9AC88755DA5A5DA08198B98A1",
+    "qianduan/html-main2/maintenance.html": "250ED51DF1A22F3E8356BBC726AA3D2B4910036B34E103BDAF1A1CC28D2E869C",
+    "qianduan/html-main2/assets/ui.js": "9D63393946A286969B2A4F850EBC2E384BE5A1BA302A42EF482CB66CE3714534",
+    "qianduan/html-main2/assets/ui.css": "C13F94A66C73999C1040D30812537945952A3B5CA250EF2F16AE33220603E49D"
+  }
+}
+
