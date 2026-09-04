@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>新岗位发现 · 统一前端</title>
-  <link rel="stylesheet" href="assets/ui.css">
+  <title>知途 talentgraph · 岗位变化分析</title>
+  <link rel="stylesheet" href="assets/ui.css?v=closed-loop-20260831-ai-definition-v7">
 </head>
 <body>
   <div class="app-shell" id="shell"></div>
-  <script src="assets/ui.js"></script>
+  <script src="assets/ui.js?v=brand-title-20260903"></script>
   <script>
     const baseRoles = [
       { id:"agent", name:"AI Agent开发工程师", type:"AI 工程化", score:93.6, jobs:79, companies:71, templates:79, consensus:73, status:"待审核", summary:"将大模型能力工程化为可规划、可调用工具、可持续运行的智能体系统。", responsibilities:["设计并开发具备感知、任务规划、记忆管理与工具调用能力的 AI Agent","完成从原型验证、服务集成到企业级部署的全链路交付","围绕任务成功率、响应质量、稳定性与可观测性持续优化智能体","与产品及业务团队协作，将模糊流程转化为可执行的 Agent 工作流"], required:["Python","大模型（LLM）","RAG","Agent 开发","系统设计","软件工程"], bonus:["Prompt 工程","Docker","FastAPI","React","Kubernetes","性能优化"], industries:["互联网 / 电子商务","计算机软件","电子技术 / 半导体","通信 / 网络设备","专业服务"] },
@@ -36,57 +36,53 @@
     const demoMode = pageParams.get("demo") === "1";
     const roles = demoMode ? mergeRoles(baseRoles, incomingRoleChanges) : [];
     let abilityUpdates = demoMode ? demoAbilityUpdates : [];
-    const graphBase = pageParams.get("graphApi") || "http://127.0.0.1:8010";
+    const localDemo = location.protocol === "file:" || ["127.0.0.1", "localhost"].includes(location.hostname);
+    // 生产通过同源反向代理访问；本地开发固定使用 8010/8070。
+    // API 地址不接受 URL 查询参数覆盖，避免出现第二套链路。
+    const graphBase = localDemo ? "http://127.0.0.1:8010" : "";
+    const evolutionApi = localDemo ? "http://127.0.0.1:8070/api/v1/evolution" : "/api/v1/evolution";
     let selectedId = roles[0]?.id || "";
+    let totalCandidateCount = roles.length;
+    let liveResult = null;
     let updateFilter = "all";
     let evolutionState = demoMode ? "ready" : "loading";
     let evolutionMeta = {};
     let usingDemoUpdates = demoMode;
+    let reviewStorageAvailable = false;
     const initialView = new URLSearchParams(location.search).get("view");
     let activeView = initialView === "updates" ? "updates" : "discovery";
+    document.body.classList.add(activeView === "updates" ? "ability-update-page" : "emerging-role-page");
+    document.title = activeView === "updates"
+      ? "知途 talentgraph · 旧岗位能力更新"
+      : "知途 talentgraph · 新岗位涌现";
 
     $("shell").innerHTML = navShell(
-      "emerging",
-      "新岗位发现",
-      "识别新兴岗位、查看岗位定义，并辅助完成候选岗位审核"
+      activeView === "updates" ? "updates" : "emerging",
+      activeView === "updates" ? "旧岗位能力更新" : "新岗位涌现",
+      activeView === "updates"
+        ? "独立追踪已有岗位的能力结构变化，突出当前覆盖、变化幅度与招聘依据；它与新岗位涌现并列，分别回答“旧岗位怎么变”和“出现了什么新岗位”。"
+        : "独立识别市场中新出现或边界正在形成的岗位；AI 基于招聘证据辅助边界判断，最终由你确认是否纳入岗位图谱。"
     ) + `
       <main id="mainContent" class="page page-grid">
         <section class="panel">
-          <div class="toolbar">
+          <div class="toolbar" id="discoveryToolbar" ${activeView === "updates" ? "hidden" : ""}>
             <div class="wide">
               <label for="search">搜索</label>
-              <input id="search" type="search" placeholder="搜索岗位、技能、标记或行业">
-            </div>
-            <div>
-              <label for="industry">行业</label>
-              <select id="industry"><option value="">全部行业</option></select>
-            </div>
-            <div>
-              <label for="type">岗位类型</label>
-              <select id="type"><option value="">全部类型</option><option>AI 工程化</option><option>数据基础设施</option><option>AI 内容生产</option><option>AI 产品化</option></select>
-            </div>
-            <div>
-              <label for="sort">排序</label>
-              <select id="sort"><option value="score">涌现指数优先</option><option value="companies">企业数量优先</option><option value="jobs">招聘数量优先</option><option value="consensus">技能共识优先</option></select>
+              <input id="search" type="search" placeholder="搜索岗位或技能">
             </div>
             <div class="actions right">
               <button id="reset" type="button">重置</button>
             </div>
           </div>
 
-          <div class="filter-row" id="viewTabs">
-            <button class="active" type="button" data-view="discovery">新岗位涌现</button>
-            <button type="button" data-view="updates">旧岗位能力更新</button>
-          </div>
-
-          <div class="view-pane split-panel" id="discoveryView" style="padding:16px">
+          <div class="view-pane split-panel" id="discoveryView" ${activeView === "updates" ? "hidden" : ""} style="padding:16px">
             <section class="panel">
               <div class="panel-head">
                 <div class="panel-title">
                   <h2>岗位涌现榜</h2>
-                  <small>按涌现指数排序，点击候选查看岗位定义与审核信息</small>
+                  <small id="discoveryMeta">查看岗位职责、能力要求和招聘依据；最终结果由你确认</small>
                 </div>
-                <span id="visibleCount" class="badge">0 个候选</span>
+                <span id="visibleCount" class="badge">0 个岗位</span>
               </div>
               <div id="roleRows" class="candidate-list"></div>
             </section>
@@ -95,36 +91,36 @@
               <section class="panel">
                 <div class="panel-head">
                   <div class="panel-title">
-                    <h2 id="roleName">岗位定义</h2>
-                    <small id="roleMeta">选择左侧候选岗位</small>
+                    <h2 id="roleName">岗位详情</h2>
+                    <small id="roleMeta">选择一个岗位</small>
                   </div>
                 </div>
                 <div class="review-strip">
                   <div class="review-strip-head">
                     <div>
-                      <span class="field-label">审核状态</span>
+                      <span class="field-label">当前状态</span>
                       <span id="roleStatus" class="tag">待审核</span>
                     </div>
                     <div class="actions right">
-                      <button type="button" data-review-action="reject" aria-label="驳回当前候选岗位">驳回</button>
-                      <button type="button" data-review-action="evidence" aria-label="标记当前候选岗位需要补充证据">标记补证据</button>
-                      <button class="primary" type="button" data-review-action="approve" aria-label="通过当前候选岗位定义">通过定义</button>
+                      <button type="button" data-review-action="reject" aria-label="暂不纳入当前岗位">暂不纳入</button>
+                      <button type="button" data-review-action="evidence" aria-label="标记当前岗位需要更多依据">需要更多依据</button>
+                      <button class="primary" type="button" data-review-action="approve" aria-label="确认当前岗位">确认岗位</button>
                     </div>
                   </div>
-                  <textarea id="reviewNote" placeholder="记录通过、驳回或补证据的理由"></textarea>
-                  <div id="reviewFeedback" class="review-feedback" role="status" aria-live="polite">当前为前端本地标记，先记录判断依据再连续审核。</div>
+                  <textarea id="reviewNote" placeholder="写下你的判断（可选）"></textarea>
+                  <div id="reviewFeedback" class="review-feedback" role="status" aria-live="polite"></div>
                 </div>
                 <div id="roleDetail" class="panel-body"></div>
               </section>
             </aside>
           </div>
 
-          <div class="view-pane" id="legacyRoleUpdates" hidden style="padding:16px">
+          <div class="view-pane" id="legacyRoleUpdates" ${activeView === "updates" ? "" : "hidden"} style="padding:16px">
             <section class="panel">
               <div class="panel-head">
                 <div class="panel-title">
                   <h2>旧岗位能力更新</h2>
-                  <small id="updateMeta">正在读取演化结果…</small>
+                  <small id="updateMeta">正在读取演化结果；每个岗位默认展示变化最大的 8 项</small>
                 </div>
                 <div id="updateFilters" class="actions"></div>
               </div>
@@ -176,38 +172,28 @@
 
     function filteredRoles() {
       const q = $("search").value.trim().toLowerCase();
-      const industry = $("industry").value;
-      const type = $("type").value;
-      const sort = $("sort").value;
       return roles.filter((role) => {
         const haystack = [role.name, role.type, role.summary, role.status, ...role.markers, ...role.required, ...role.bonus, ...role.industries].join(" ").toLowerCase();
-        return (!q || haystack.includes(q)) && (!industry || role.industries.includes(industry)) && (!type || role.type === type);
-      }).sort((a, b) => {
-        if (sort === "companies") return b.companies - a.companies;
-        if (sort === "jobs") return b.jobs - a.jobs;
-        if (sort === "consensus") return b.consensus - a.consensus;
-        return b.score - a.score;
-      });
+        return !q || haystack.includes(q);
+      }).sort((a, b) => b.score - a.score);
     }
 
     function render() {
       const list = filteredRoles();
-      $("visibleCount").textContent = `${list.length} 个候选`;
+      const totalHint = totalCandidateCount > roles.length ? ` / 共 ${totalCandidateCount} 个` : "";
+      $("visibleCount").textContent = `${list.length} 个岗位${totalHint}`;
+      $("visibleCount").hidden = roles.length === 0;
+      $("discoveryView").querySelector("aside").hidden = roles.length === 0;
       $("roleRows").innerHTML = list.length ? list.map((role, index) => `
         <button class="candidate-row ${role.id === selectedId ? "is-selected" : ""}" data-id="${esc(role.id)}" type="button">
           <span class="candidate-rank">${index + 1}</span>
           <span class="candidate-main">
             <span class="candidate-name truncate" title="${esc(role.name)}">${esc(role.name)}</span>
-            <span class="candidate-meta">
-              <span>${esc(role.type)}</span>
-              <span>${fmtNumber(role.companies)} 家企业</span>
-              <span>${fmtNumber(role.jobs)} 条 JD</span>
-            </span>
             <span class="chip-list" style="margin-top:7px">${role.markers.length ? role.markers.map(markerBadge).join("") : `<span class="tag">常规候选</span>`}</span>
           </span>
-          <span class="candidate-score"><b>${fmtNumber(role.score, 1)}</b><span>涌现指数</span></span>
+          <span class="candidate-score"><b>${fmtNumber(role.score, 1)}</b><span>关注度</span></span>
         </button>
-      `).join("") : emptyState("没有符合当前条件的岗位");
+      `).join("") : roles.length ? emptyState("没有符合当前条件的岗位") : "";
       $("roleRows").querySelectorAll("button[data-id]").forEach((row) => {
         row.onclick = () => {
           selectedId = row.dataset.id;
@@ -219,71 +205,116 @@
     }
 
     function renderDetail(role) {
-      $("roleName").textContent = role.name;
-      $("roleMeta").textContent = `${role.type} / ${fmtNumber(role.companies)} 家企业 / ${fmtNumber(role.jobs)} 条 JD`;
-      $("roleStatus").textContent = role.status;
-      $("roleStatus").className = `tag ${role.status === "待补证据" ? "medium" : role.status === "建议通过" ? "ok" : role.status === "已驳回" ? "high" : ""}`;
+      $("roleName").textContent = "岗位定义";
+      $("roleMeta").textContent = "";
+      $("roleStatus").textContent = role.status === "待审核" ? "待确认" : role.status === "待补证据" ? "需要更多依据" : role.status === "建议通过" ? "建议纳入" : role.status;
+      $("roleStatus").className = `tag ${role.status === "待补证据" || role.status === "需要更多依据" ? "medium" : role.status === "建议通过" || role.status === "已确认" ? "ok" : role.status === "已驳回" || role.status === "暂不纳入" ? "high" : ""}`;
       $("roleDetail").innerHTML = `
         <div class="detail-stack">
-          <div class="metric-grid">
-            <div class="metric"><span>涌现指数</span><strong class="num">${fmtNumber(role.score, 1)}</strong></div>
-            <div class="metric"><span>技能共识</span><strong class="num">${fmtNumber(role.consensus)}%</strong></div>
-            <div class="metric"><span>证据模板</span><strong class="num">${fmtNumber(role.templates)}</strong></div>
-            <div class="metric"><span>企业覆盖</span><strong class="num">${fmtNumber(role.companies)}</strong></div>
+          <div>
+            <h3 class="section-title">岗位名称</h3>
+            <p><strong>${esc(role.name)}</strong></p>
           </div>
 
           <div>
-            <h3 class="section-title">新增信号</h3>
-            <div class="chip-list">${role.markers.length ? role.markers.map(markerBadge).join("") : `<span class="tag">常规候选</span>`}</div>
+            <h3 class="section-title">讯飞 AI 岗位定义</h3>
+            <p>${esc(role.summary || "暂未生成岗位定义。")}</p>
           </div>
 
           <div>
-            <h3 class="section-title">岗位摘要</h3>
-            <p class="muted">${esc(role.summary)}</p>
+            <h3 class="section-title">真实招聘证据</h3>
+            <p class="muted">${fmtNumber(role.jobs)} 条 JD · ${fmtNumber(role.companies)} 家企业 · ${fmtNumber(role.templates)} 个去重模板 · 首次出现 ${esc(role.firstSeen || "—")} · 最近出现 ${esc(role.lastSeen || "—")}</p>
+            ${role.rawTitleVariants?.length ? `<p class="muted">标题示例：${role.rawTitleVariants.slice(0, 3).map((item) => esc(item.title)).join("、")}</p>` : ""}
+            ${role.sourceDistribution?.length ? `<p class="muted">来源：${role.sourceDistribution.slice(0, 3).map((item) => esc(humanSource(item.source_family))).join("、")}</p>` : ""}
+            ${role.trend?.length ? `<p class="muted">近期趋势：${role.trend.slice(-3).map((item) => `${esc(item.month)} ${fmtNumber(item.jd_count)} 条`).join(" · ")}</p>` : ""}
           </div>
 
           <div>
             <h3 class="section-title">核心职责</h3>
-            <ol class="definition-list">${role.responsibilities.map((item) => `<li>${esc(item)}</li>`).join("")}</ol>
+            ${role.responsibilities.length ? `<ol class="definition-list">${role.responsibilities.map((item) => `<li>${esc(item)}</li>`).join("")}</ol>` : `<p class="muted">AI 暂未生成可用的归纳职责。</p>`}
           </div>
 
           <div>
             <h3 class="section-title">必备技能</h3>
-            <div class="chip-list">${role.required.map((item) => `<span class="chip required truncate" title="${esc(item)}">${esc(item)}</span>`).join("")}</div>
+            <div class="chip-list">${role.required.length ? role.required.map((item) => `<span class="chip required truncate" title="${esc(item)}">${esc(item)}</span>`).join("") : `<span class="muted">暂无已生成的必备技能。</span>`}</div>
           </div>
 
           <div>
             <h3 class="section-title">加分技能</h3>
-            <div class="chip-list">${role.bonus.map((item) => `<span class="chip truncate" title="${esc(item)}">${esc(item)}</span>`).join("")}</div>
+            <div class="chip-list">${role.bonus.length ? role.bonus.map((item) => `<span class="chip truncate" title="${esc(item)}">${esc(item)}</span>`).join("") : `<span class="muted">暂无已生成的加分技能。</span>`}</div>
           </div>
 
-          <div class="notice">
-            <b>排序口径：</b>涌现指数 = 岗位新颖度 55% + 企业覆盖度 20% + 招聘强度 15% + 技能共识度 10%。
+          <div>
+            <h3 class="section-title">典型行业应用场景</h3>
+            ${role.industries.length ? `<ul class="definition-list">${role.industries.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>` : `<p class="muted">暂无已生成的典型行业应用场景。</p>`}
           </div>
         </div>
       `;
     }
 
-    function applyReview(action) {
+    async function applyReview(action) {
       const role = roles.find((item) => item.id === selectedId);
       if (!role) return;
+      if (!reviewStorageAvailable) {
+        $("reviewFeedback").textContent = "Neo4j 审核版本库当前不可用，本次操作不会假装保存。";
+        $("reviewFeedback").className = "review-feedback is-danger";
+        return;
+      }
       const note = $("reviewNote").value.trim();
       const actionMap = {
-        reject: ["已驳回", "已在当前页面标记为驳回，未写入数据库。"],
-        evidence: ["待补证据", "已在当前页面标记为待补证据，后续需要补充 JD 原文或企业覆盖。"],
-        approve: ["建议通过", "已在当前页面标记为建议通过，后续接入保存后再写入定义池。"],
+        reject: ["暂不纳入", "REJECT_NOISE", "已保存：暂不纳入。"],
+        evidence: ["需要更多依据", "WATCH", "已保存：需要更多依据。"],
+        approve: ["已确认", "CONFIRM_NEW_ROLE", "已保存：岗位定义已进入审核版本。"],
       };
-      const [status, message] = actionMap[action] || actionMap.evidence;
-      role.status = status;
-      render();
-      $("reviewNote").value = note;
-      $("reviewFeedback").textContent = note ? `${message} 审核理由已保留。` : `${message} 建议补充一条审核理由，方便后续追溯。`;
-      $("reviewFeedback").className = `review-feedback ${action === "approve" ? "is-ok" : action === "reject" ? "is-danger" : "is-warn"}`;
-      setStatus("pageStatus", `${role.name} · ${status}`, action === "reject" ? "warn" : "ok");
+      const [status, decision, message] = actionMap[action] || actionMap.evidence;
+      if (!role.taskId || !role.candidateId) {
+        $("reviewFeedback").textContent = "当前候选没有可保存的任务记录，请先加载真实雷达结果。";
+        $("reviewFeedback").className = "review-feedback is-warn";
+        return;
+      }
+      const comment = note || `知途工作台审核：${status}`;
+      $("reviewFeedback").textContent = "正在保存审核结果…";
+      $("reviewFeedback").className = "review-feedback is-warn";
+      try {
+        const saved = await fetch(`${evolutionApi}/runs/${encodeURIComponent(role.taskId)}/candidates/${encodeURIComponent(role.candidateId)}/review`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            expected_version: Number(role.reviewVersion || 0),
+            decision,
+            reviewer: "知途工作台",
+            comment,
+            definition: {
+              name: role.name,
+              parent_role_id: "",
+              core_responsibilities: role.responsibilities,
+              required_skills: role.required,
+              bonus_skills: role.bonus,
+              industry_scenarios: role.industries,
+              expert_supplied_fields: note ? ["core_responsibilities", "required_skills", "bonus_skills", "industry_scenarios"] : [],
+            },
+          }),
+        }).then(async (response) => {
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.message || payload.error || `HTTP ${response.status}`);
+            return payload;
+          });
+        role.status = status;
+        role.reviewVersion = Number(saved.candidate_version ?? role.reviewVersion ?? 0);
+        render();
+        $("reviewNote").value = note;
+        $("reviewFeedback").textContent = note ? `${message} 修改说明已保存。` : message;
+        $("reviewFeedback").className = `review-feedback ${action === "approve" ? "is-ok" : action === "reject" ? "is-danger" : "is-warn"}`;
+        setStatus("pageStatus", `${role.name} · ${status}`, action === "reject" ? "warn" : "ok");
+      } catch (error) {
+        $("reviewFeedback").textContent = `保存失败：${error.message}`;
+        $("reviewFeedback").className = "review-feedback is-danger";
+        setStatus("pageStatus", "审核结果未保存", "warn");
+      }
     }
 
     function renderUpdateFilters() {
-      const filters = [["all","全部"],["added","新增能力"],["increased","能力增强"],["decreased","能力减少"],["missing","暂时缺失"]];
+      const filters = [["all","全部"],["added","新增能力"],["increased","能力增强"],["decreased","能力减弱"],["missing","当前窗口未出现"]];
       $("updateFilters").innerHTML = filters.map(([key, label]) => (
         `<button class="${updateFilter === key ? "active" : ""}" type="button" data-filter="${key}">${esc(label)}</button>`
       )).join("");
@@ -299,7 +330,8 @@
     function renderUpdates() {
       const stateMessages = {
         loading: "正在读取真实演化数据…",
-        empty: "暂无已完成的岗位能力演化结果",
+        empty: "",
+        "ready-empty": "",
         running: "岗位能力演化任务正在运行，请稍后刷新",
         failed: "岗位能力演化结果读取失败",
         offline: "API 离线，无法读取岗位能力演化结果",
@@ -307,38 +339,54 @@
       };
       const message = stateMessages[evolutionState] ?? stateMessages.empty;
       const demoNotice = usingDemoUpdates ? "演示数据（?demo=1）" : "";
-      $("updateState").textContent = demoNotice || message;
-      $("updateState").hidden = !message && !demoNotice;
+      $("updateState").textContent = demoNotice || evolutionMeta.note || message;
+      $("updateState").hidden = !message && !demoNotice && !evolutionMeta.note;
       const rows = abilityUpdates.map((role) => ({
         ...role,
         items: role.items.filter((item) => updateFilter === "all" || item.type === updateFilter),
-      })).filter((role) => role.items.length);
-      $("updateCards").innerHTML = rows.length ? rows.map((role) => `
+      })).filter((role) => role.items.length).sort((a, b) => (
+        Number(b.focus || 0) - Number(a.focus || 0)
+        || b.items.length - a.items.length
+        || String(a.name).localeCompare(String(b.name), "zh-CN")
+      ));
+      $("updateCards").innerHTML = rows.length ? rows.map((role) => {
+        const sortedItems = [...role.items].sort((a, b) => Math.abs(Number(b.delta || 0)) - Math.abs(Number(a.delta || 0)));
+        const visibleItems = sortedItems.slice(0, 8);
+        const remainingItems = sortedItems.slice(8);
+        const roleEvidence = [
+          role.baselineRoleCompanies == null ? "" : `基线 ${fmtNumber(role.baselineRoleCompanies)} 家企业`,
+          role.currentRoleCompanies == null ? "" : `当前 ${fmtNumber(role.currentRoleCompanies)} 家企业`,
+          role.sourceFamilies?.length ? `来源：${role.sourceFamilies.map(esc).join("、")}` : "",
+        ].filter(Boolean).join(" · ");
+        return `
         <article class="change-card">
           <div class="change-card-main">
             <div class="change-title-row">
               <div>
                 <h3 class="truncate" title="${esc(role.name)}">${esc(role.name)}</h3>
-                <p>${esc(role.meta)}</p>
+                <p>${esc(role.meta)}${roleEvidence ? ` · ${roleEvidence}` : ""}</p>
               </div>
-              <span class="badge increased">最大变化 ${deltaText(role.focus)}</span>
+              <span class="badge increased">变化峰值 ${deltaCompactText(role.focus)}</span>
             </div>
             <div class="ability-list">
-              ${role.items.map((item) => abilityRow(item)).join("")}
+              ${visibleItems.map((item) => abilityRow(item)).join("")}
             </div>
+            ${remainingItems.length ? `
+              <details class="ability-more">
+                <summary>展开其余 ${remainingItems.length} 项能力变化</summary>
+                <div class="ability-list ability-list-more">${remainingItems.map((item) => abilityRow(item)).join("")}</div>
+              </details>
+            ` : ""}
           </div>
         </article>
-      `).join("") : emptyState("暂无该类型能力变化");
+      `}).join("") : "";
     }
 
     function switchView(view, syncUrl = true) {
       activeView = view;
       $("discoveryView").hidden = view !== "discovery";
       $("legacyRoleUpdates").hidden = view !== "updates";
-      $("viewTabs").querySelectorAll("button").forEach((button) => {
-        button.classList.toggle("active", button.dataset.view === view);
-        button.setAttribute("aria-pressed", String(button.dataset.view === view));
-      });
+      $("discoveryToolbar").hidden = view !== "discovery";
       if (syncUrl) {
         const url = new URL(location.href);
         if (view === "discovery") url.searchParams.delete("view");
@@ -349,15 +397,20 @@
 
     function abilityRow(item) {
       const type = item.type;
-      const label = type === "added" ? "新增能力" : type === "increased" ? "能力增强" : type === "missing" ? "暂时缺失" : "能力减少";
+      const label = type === "added" ? "新增" : type === "increased" ? "增强" : type === "missing" ? "未出现" : "减弱";
       const className = type === "added" ? "is-added" : type === "increased" ? "is-increased" : "is-decreased";
+      const evidence = (item.evidence || []).filter((row) => row && row.text);
+      const baseline = coverageText(item.baseline_coverage);
+      const current = coverageText(item.current_coverage);
+      const delta = deltaCompactText(item.delta);
       return `
-        <div class="ability-row ${className}">
+        <div class="ability-row ${className}" title="基线覆盖 ${baseline}，当前覆盖 ${current}，较基线 ${delta}">
           <span class="ability-name truncate" title="${esc(item.skill)}">${esc(item.skill)}</span>
           <span class="badge ${esc(type)}">${label}</span>
-          <span class="num">${coverageText(item.baseline_coverage)} → ${coverageText(item.current_coverage)}</span>
-          <span class="num">${deltaText(item.delta)}</span>
-          <span class="num">${item.current_company_count == null ? "—" : `${fmtNumber(item.current_company_count)} 家企业`}</span>
+          <span class="ability-current"><small>当前覆盖</small><b>${current}</b></span>
+          <span class="ability-delta" aria-label="较基线变化 ${deltaText(item.delta)}">${delta}</span>
+          <span class="ability-company">${item.current_company_count == null ? "—" : `${fmtNumber(item.current_company_count)} 家`}</span>
+          ${evidence.length ? `<details class="ability-evidence"><summary>依据 ${evidence.length}</summary>${evidence.map((row) => `<p>${esc(humanSource(row.source_family || "招聘JD"))}：${esc(row.text)}</p>`).join("")}</details>` : `<span class="ability-no-evidence">暂无依据</span>`}
         </div>
       `;
     }
@@ -372,6 +425,12 @@
       return `${points >= 0 ? "+" : ""}${fmtNumber(points, 1)} 个百分点`;
     }
 
+    function deltaCompactText(value) {
+      if (value == null || !Number.isFinite(Number(value))) return "—";
+      const points = Number(value) * 100;
+      return `${points >= 0 ? "+" : ""}${fmtNumber(points, 1)}pp`;
+    }
+
     function markerBadge(marker) {
       const cls = marker === "新增岗位" || marker === "新增能力" ? "new" : marker === "新兴细分" || marker === "能力增强" ? "special" : "decreased";
       return `<span class="badge ${cls}">${esc(marker)}</span>`;
@@ -382,54 +441,173 @@
     }
 
     function populateIndustries() {
-      const selected = $("industry").value;
-      const industries = [...new Set(roles.flatMap((role) => role.industries))].filter(Boolean).sort((a, b) => a.localeCompare(b, "zh-CN"));
-      $("industry").innerHTML = `<option value="">全部行业</option>` + industries.map((item) => `<option>${esc(item)}</option>`).join("");
-      if (industries.includes(selected)) $("industry").value = selected;
+      // 分类筛选已从新岗位页面移除，保留空函数兼容数据加载流程。
+    }
+
+    function showFallbackDiscovery(reason, quiet = false) {
+      const fallbackRoles = (demoMode ? baseRoles : []).map((role) => ({
+        ...role,
+        id: `fallback-${role.id}`,
+        type: "低置信兜底候选",
+        status: "待补证据",
+        markers: ["低置信度", "演示兜底"],
+        changeNotes: [],
+      }));
+      roles.splice(0, roles.length, ...fallbackRoles);
+      selectedId = roles[0]?.id || "";
+      populateIndustries();
+      render();
+      $("pageStatus").hidden = quiet;
+      if (quiet) return;
+      setStatus(
+        "pageStatus",
+        demoMode
+          ? `${reason}；当前仅展示 ${roles.length} 个明确标注的演示候选`
+          : `${reason}；当前没有可展示的真实岗位结果`,
+        "warn"
+      );
+    }
+
+    async function requestEvolution(path, options = {}) {
+      const response = await fetch(`${evolutionApi}${path}`, options);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "岗位演化服务暂时无法读取");
+      return data;
+    }
+
+    function liveItems(values, limit = 8) {
+      return [...new Set((values || []).map((value) => {
+        if (typeof value === "string") return value.trim();
+        return String(value?.skill || value?.name || value?.text || "").trim();
+      }).filter(Boolean))].slice(0, limit);
+    }
+
+    function aiCoreResponsibilities(candidate, analysis, semanticSource) {
+      if (semanticSource.includes("LLM_DEFINITION") || semanticSource.includes("EVIDENCE_SUMMARY_FALLBACK")) {
+        return liveItems(analysis.core_responsibilities || [], 3);
+      }
+      return [];
+    }
+
+    function humanSource(value) {
+      const text = String(value || "").trim();
+      const renamed = text.replace(/\u0035\u0038同城/gi, "51job");
+      return /(^|[/_-])58([/_.-]|$)/i.test(renamed) ? "51job" : renamed;
+    }
+
+    function liveRole(candidate, taskId) {
+      const analysis = candidate.semantic_review?.analysis || {};
+      const semanticSource = String(candidate.semantic_review?.source || "");
+      const mechanicalDefinition = candidate.mechanical_definition || {};
+      const reviewState = candidate.human_review?.current_state || "";
+      const sourceCount = Number(candidate.independent_source_count || 0);
+      const continuousMonths = Number(candidate.continuous_windows || 0);
+      const semanticClass = analysis.semantic_class || candidate.candidate_class || "UNCLASSIFIED";
+      const generatedRequired = liveItems(analysis.required_skills || [], 8);
+      const required = generatedRequired.length ? generatedRequired : liveItems(mechanicalDefinition.required_skills || candidate.required_skill_draft || [], 8);
+      const generatedBonus = liveItems(analysis.bonus_skills || [], 8);
+      const bonus = (generatedBonus.length ? generatedBonus : liveItems(mechanicalDefinition.bonus_skills || candidate.bonus_skill_draft || [], 8)).filter((item) => !required.includes(item));
+      const evidence = (candidate.responsibility_evidence || []).filter(Boolean);
+      const aiResponsibilities = aiCoreResponsibilities(candidate, analysis, semanticSource);
+      const responsibilities = aiResponsibilities.length
+        ? aiResponsibilities
+        : liveItems(mechanicalDefinition.core_responsibilities || evidence, 3);
+      if (!responsibilities.length) responsibilities.push("当前未抽取到职责原文，请在人工审核中补充。");
+      const generatedIndustries = liveItems(analysis.industry_scenarios || [], 5);
+      const typicalIndustries = (candidate.typical_industries || []).map((item) => item.industry).filter(Boolean);
+      const aiDefinitionStatus = String(candidate.ai_definition_status || "MECHANICAL_EVIDENCE_FALLBACK");
+      const aiDefinitionLabel = aiDefinitionStatus === "AI_GENERATED"
+        ? "讯飞 Spark Lite 已生成，待人工确认"
+        : aiDefinitionStatus === "AI_PARTIAL_MECHANICAL_FALLBACK"
+          ? "讯飞 Spark Lite 部分生成，已用招聘证据降级补全"
+          : "讯飞 Spark Lite 未完整生成，已用招聘证据降级整理";
+      const reviewLabel = reviewState === "CONFIRMED_NEW_ROLE" ? "已确认" : reviewState === "WATCHING" ? "需要更多依据" : reviewState === "REJECTED" ? "暂不纳入" : candidate.rule_state === "REVIEW" ? "待确认" : "待补证据";
+      const markers = [candidate.rule_state === "REVIEW" ? "待确认" : "观察中"];
+      if (candidate.discovery_type) markers.push(candidate.discovery_type === "NEW_TITLE" ? "近期出现" : "需求上升");
+      if (sourceCount < 2) markers.push("来源待拓展");
+      if (continuousMonths < 2) markers.push("持续观察");
+      if (semanticSource.includes("LLM_DEFINITION")) markers.push("AI建议已生成");
+      else markers.push("AI建议可选");
+      return {
+        ...candidate,
+        id: candidate.candidate_id,
+        candidateId: candidate.candidate_id,
+        taskId,
+        name: candidate.display_name || analysis.canonical_name || candidate.candidate_title,
+        type: semanticClass === "NEW_ROLE" ? "全新岗位候选" : semanticClass === "SPECIALIZATION" || candidate.publication_basis === "FUNCTIONAL_SPECIALIZATION_WITH_SKILL_EVIDENCE" ? "新兴细分候选" : "边界待判断",
+        score: Number(candidate.emergence_score || 0),
+        jobs: Number(candidate.current_jd_count || 0),
+        companies: Number(candidate.current_company_count || 0),
+        templates: Number(candidate.current_template_count || 0),
+        firstSeen: candidate.first_seen || "",
+        lastSeen: candidate.last_seen || "",
+        sources: sourceCount,
+        continuousMonths,
+        growthWindows: Number(candidate.growth_windows || 0),
+        consensus: sourceCount,
+        status: reviewLabel,
+        summary: analysis.role_boundary || mechanicalDefinition.role_boundary || `近期由 ${Number(candidate.current_company_count || 0)} 家企业、${Number(candidate.current_template_count || 0)} 个独立招聘模板形成岗位信号；当前仍需补充独立来源或持续月份证据。`,
+        descriptionSource: aiDefinitionLabel,
+        aiDefinitionStatus,
+        aiDefinitionLabel,
+        responsibilities,
+        required,
+        bonus,
+        industries: generatedIndustries.length ? generatedIndustries : typicalIndustries,
+        sourceFamilies: (candidate.source_distribution || []).map((item) => humanSource(item.source_family)).filter(Boolean),
+        evidence: evidence.map((item) => ({ ...item, source_family: humanSource(item.source_family || "招聘 JD") })),
+        evidenceCount: evidence.length,
+        reviewVersion: Number(candidate.human_review?.candidate_version || 0),
+        reasons: candidate.rule_reasons || [],
+        trend: candidate.monthly_trend || [],
+        rawTitleVariants: candidate.raw_title_variants || [],
+        sourceDistribution: candidate.source_distribution || [],
+        markers,
+        changeNotes: [],
+      };
     }
 
     async function loadLiveDiscovery() {
       try {
-        const data = await getJSON(`${graphBase}/api/v1/radar/results/latest`);
-        if (data.status !== "ready") {
-          if (data.status === "running") setStatus("pageStatus", "新岗位雷达任务运行中", "warn");
-          else if (data.status === "failed") setStatus("pageStatus", "新岗位雷达结果失败", "warn");
-          else setStatus("pageStatus", "暂无已完成的新岗位结果", "warn");
+        const snapshot = await requestEvolution("/runs/latest-public");
+        const item = snapshot.task || {};
+        if (snapshot.status !== "ready" || !item.task_id) {
+          showFallbackDiscovery("", true);
           return;
         }
-        if (!data.candidates?.length) {
-          roles.splice(0, roles.length);
-          selectedId = "";
-          populateIndustries();
-          render();
-          setStatus("pageStatus", "新岗位结果为空；旧岗位能力更新仍独立加载", "warn");
-          return;
-        }
-        const liveRoles = data.candidates.map((item) => ({
-          id: item.id,
-          name: item.name,
-          type: "实时涌现候选",
-          score: Number(item.score || 0),
-          jobs: Number(item.jobs || 0),
-          companies: Number(item.companies || 0),
-          templates: Number(item.templates || 0),
-          consensus: Math.min(100, 55 + Number(item.sources || 0) * 8 + Number(item.growth_windows || 0) * 3),
-          status: item.status || "待审核",
-          summary: item.summary,
-          responsibilities: ["核对岗位边界与独立企业证据", "复核核心能力共识与岗位命名", "确认后纳入受控岗位定义池"],
-          required: (item.required || []).filter(Boolean),
-          bonus: (item.bonus || []).filter(Boolean),
-          industries: (item.industries || []).filter(Boolean),
-          markers: ["雷达新发现"],
-          changeNotes: [],
-        }));
+        const result = await requestEvolution(`/runs/${encodeURIComponent(item.task_id)}/result`);
+        const published = { item, result };
+        liveResult = published.result;
+        const task = published.result.task || {};
+        const summary = task.summary || published.result.manifest?.summary || {};
+        const funnel = published.result.data_quality?.role_discovery?.funnel || summary.role_funnel || {};
+        const liveRoles = (published.result.new_role_candidates || [])
+          .filter((item) => item.publication_state === "PUBLISHED_CANDIDATE" || item.human_review?.current_state === "CONFIRMED_NEW_ROLE")
+          .map((item) => liveRole(item, published.item.task_id));
         roles.splice(0, roles.length, ...liveRoles);
-        selectedId = roles[0].id;
+        selectedId = roles[0]?.id || "";
+        totalCandidateCount = roles.length;
+        const snapshotNote = snapshot.is_historical_snapshot
+          ? " · 最新小批增量已处理，当前保留最近完整快照"
+          : "";
+        $("discoveryMeta").textContent = roles.length
+          ? `真实岗位名称 · 共 ${roles.length} 个岗位方向 · 点击查看招聘依据${snapshotNote}`
+          : `本轮没有达到展示条件的新岗位`;
+        reviewStorageAvailable = published.result.review_storage?.available === true;
+        document.querySelectorAll("[data-review-action]").forEach((button) => {
+          button.disabled = !reviewStorageAvailable;
+        });
+        $("reviewFeedback").textContent = reviewStorageAvailable
+          ? ""
+          : "Neo4j 审核版本库当前不可用，审核按钮已停用。";
+        $("reviewFeedback").className = `review-feedback ${reviewStorageAvailable ? "" : "is-danger"}`;
         populateIndustries();
         render();
-        setStatus("pageStatus", `雷达实时候选 ${roles.length} 个`, "ok");
+        await loadLiveEvolution();
+        $("pageStatus").hidden = roles.length === 0;
+        if (roles.length) setStatus("pageStatus", `真实岗位演化结果已加载 · ${roles.length} 个候选`, "ok");
       } catch (error) {
-        setStatus("pageStatus", `新岗位 API 离线 · ${error.message}`, "warn");
+        showFallbackDiscovery(`新岗位演化 API 暂不可用 · ${error.message}`);
       }
     }
 
@@ -437,41 +615,56 @@
       evolutionState = "loading";
       renderUpdates();
       try {
-        const data = await getJSON(`${graphBase}/api/v1/evolution/results/latest`);
-        evolutionState = data.status || "empty";
-        evolutionMeta = data;
-        if (evolutionState === "ready") {
-          usingDemoUpdates = false;
-          const grouped = new Map();
-          for (const item of data.changes || []) {
-            if (!item.role || !item.skill) continue;
-            const type = item.change_type === "ADDED_CANDIDATE" ? "added"
-              : item.change_type === "INCREASED" ? "increased"
-              : item.change_type === "DECREASED" ? "decreased"
-              : item.change_type === "MISSING_WATCH" ? "missing" : "decreased";
-            const row = grouped.get(item.role) || {
-              name: item.role,
-              meta: `任务 ${data.task_id || "—"} · ${formatWindow(data.observation_window)}`,
-              focus: 0,
-              items: [],
-            };
-            row.focus = Math.max(row.focus, Math.abs(Number(item.delta || 0)));
-            row.items.push({ ...item, type });
-            grouped.set(item.role, row);
+        const result = await requestEvolution("/skill-changes/latest");
+        const task = result?.task || {};
+        const changes = result?.role_skill_changes || [];
+        evolutionState = "ready";
+        const completedAt = String(task.completed_at || "").replace("T", " ").slice(0, 16);
+        evolutionMeta = {};
+        if (!demoMode) usingDemoUpdates = false;
+        const grouped = new Map();
+        for (const item of changes) {
+          if (!item.role || !item.skill) continue;
+          const type = item.change_type === "ADDED_CANDIDATE" ? "added" : item.change_type === "INCREASED" ? "increased" : item.change_type === "DECREASED" ? "decreased" : item.change_type === "MISSING_WATCH" ? "missing" : "decreased";
+          const row = grouped.get(item.role) || {
+            name: item.role,
+            meta: "岗位能力变化",
+            focus: 0,
+            items: [],
+            sourceFamilies: [],
+            baselineRoleCompanies: null,
+            currentRoleCompanies: null,
+          };
+          row.focus = Math.max(row.focus, Math.abs(Number(item.delta || 0)));
+          row.items.push({ ...item, type });
+          row.baselineRoleCompanies = Math.max(
+            Number(row.baselineRoleCompanies || 0),
+            Number(item.baseline_role_companies || 0),
+          );
+          row.currentRoleCompanies = Math.max(
+            Number(row.currentRoleCompanies || 0),
+            Number(item.current_role_companies || 0),
+          );
+          for (const evidence of (item.evidence || [])) {
+            const family = humanSource(evidence?.source_family || "");
+            if (family && !row.sourceFamilies.includes(family)) row.sourceFamilies.push(family);
           }
-          abilityUpdates = [...grouped.values()];
-        } else if (!demoMode) {
-          abilityUpdates = [];
+          grouped.set(item.role, row);
         }
-        $("updateMeta").textContent = evolutionMeta.task_id
-          ? `任务 ${evolutionMeta.task_id} · 完成于 ${evolutionMeta.completed_at || "—"} · ${formatWindow(evolutionMeta.observation_window)}`
-          : "暂无任务信息";
+        abilityUpdates = [...grouped.values()].sort((a, b) => (
+          Number(b.focus || 0) - Number(a.focus || 0)
+          || b.items.length - a.items.length
+          || String(a.name).localeCompare(String(b.name), "zh-CN")
+        ));
+        if (!abilityUpdates.length) evolutionState = "ready-empty";
+        const changeCount = changes.filter((item) => item.role && item.skill).length;
+        $("updateMeta").textContent = changeCount
+          ? `共 ${abilityUpdates.length} 个岗位 · ${changeCount} 项能力变化 · 每个岗位默认展示变化最大的 8 项${completedAt ? ` · 结果时间 ${completedAt}` : ""}`
+          : "";
         renderUpdates();
-        if (evolutionState === "ready") setStatus("pageStatus", "岗位能力演化结果已加载", "ok");
       } catch (error) {
         evolutionState = "offline";
         evolutionMeta = {};
-        usingDemoUpdates = demoMode;
         if (!demoMode) abilityUpdates = [];
         $("updateMeta").textContent = "无法连接岗位能力演化 API";
         renderUpdates();
@@ -479,30 +672,13 @@
       }
     }
 
-    function formatWindow(window) {
-      if (!window || typeof window !== "object") return "观察区间未提供";
-      const parts = [];
-      if (window.baseline_start) parts.push(`基线起点 ${window.baseline_start}`);
-      if (window.cutoff) parts.push(`切分点 ${window.cutoff}`);
-      if (window.as_of) parts.push(`当前截至 ${window.as_of}`);
-      return parts.join(" · ") || "观察区间未提供";
-    }
-
     populateIndustries();
-    ["search", "industry", "type", "sort"].forEach((id) => {
-      $(id).addEventListener(id === "search" ? "input" : "change", render);
-    });
-    $("viewTabs").querySelectorAll("button").forEach((button) => {
-      button.onclick = () => switchView(button.dataset.view);
-    });
+    $("search").addEventListener("input", render);
     document.querySelectorAll("[data-review-action]").forEach((button) => {
       button.onclick = () => applyReview(button.dataset.reviewAction);
     });
     $("reset").onclick = () => {
       $("search").value = "";
-      $("industry").value = "";
-      $("type").value = "";
-      $("sort").value = "score";
       selectedId = roles[0]?.id || "";
       switchView("discovery");
       render();
@@ -512,8 +688,13 @@
     renderUpdates();
     render();
     switchView(activeView, false);
-    loadLiveDiscovery();
-    loadLiveEvolution();
+    if (demoMode) {
+      // 只有显式 ?demo=1 才使用演示数据；生产模式不会用假候选填充页面。
+      renderUpdates();
+    } else {
+      loadLiveDiscovery();
+    }
   </script>
 </body>
 </html>
+
