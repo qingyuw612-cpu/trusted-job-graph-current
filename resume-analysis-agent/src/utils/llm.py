@@ -47,7 +47,10 @@ LLM_PROVIDERS: Dict[str, Dict[str, Optional[str]]] = {
     },
 }
 
-DEFAULT_PROVIDER = "deepseek"
+# Production already carries the built-in Spark credentials under the legacy
+# IFLYTEK_SPARK_* names. Keep that path as the default for the no-config web
+# experience, while still allowing explicit provider switching.
+DEFAULT_PROVIDER = "iflytek"
 
 
 def get_llm_config() -> Dict[str, Any]:
@@ -65,8 +68,14 @@ def get_llm_config() -> Dict[str, Any]:
     prefix = provider.upper() + "_"
 
     api_key = os.getenv(prefix + "API_KEY")
-    base_url = os.getenv(prefix + "BASE_URL") or preset.get("base_url")
-    model = os.getenv(prefix + "MODEL") or preset.get("default_model")
+    base_url = os.getenv(prefix + "BASE_URL")
+    model = os.getenv(prefix + "MODEL")
+    if provider == "iflytek":
+        api_key = api_key or os.getenv("IFLYTEK_SPARK_API_PASSWORD")
+        base_url = base_url or os.getenv("IFLYTEK_SPARK_BASE_URL")
+        model = model or os.getenv("IFLYTEK_SPARK_MODEL")
+    base_url = base_url or preset.get("base_url")
+    model = model or preset.get("default_model")
     extra_body_raw = os.getenv(prefix + "EXTRA_BODY")
 
     if not api_key:
@@ -224,3 +233,4 @@ def call_llm_json(
 def call_deepseek_json(prompt: str, temperature: float = 0.0) -> Dict[str, Any]:
     """兼容别名：等价于 call_llm_json（旧代码/文档保留）。"""
     return call_llm_json(prompt, temperature=temperature)
+
